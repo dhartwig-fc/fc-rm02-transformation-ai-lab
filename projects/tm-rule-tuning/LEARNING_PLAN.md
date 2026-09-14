@@ -1,37 +1,54 @@
 # 10-Week Advanced Transaction Monitoring Rule Tuning Learning Plan
 
-## Provenance of this plan
+A practical curriculum taking you from "what is a confusion matrix" to a
+complete, validation-ready tuning engagement. Every week is a runnable script:
+you read it, run it, and read what it printed.
 
-**All ten weeks are transcribed from the supplied specification.** Nothing here
-is extrapolated.
+---
 
-Each week records the spec's Concept, Topics, Exercise, Deliverable and Success
-Criteria as written. Where a week's runnable script goes beyond the spec, it is
-either building the machinery the exercise needs, or flagging something the
-exercise itself reveals — noted in a blockquote under that week.
+## How to use this plan
 
-| Outcome (from the spec) | Covered in |
-| --- | --- |
-| Design labelled and proxy-labelled backtests | Weeks 1, 2 |
-| Tune transaction-monitoring thresholds using evidence | Week 3 |
-| Quantify precision/recall trade-offs | Weeks 1, 3 |
-| Build alert-volume and risk-yield curves | Weeks 3, 4 |
-| Conduct segment-specific calibration | Week 5 |
-| Compare incumbent versus challenger rules | Week 6 |
-| Identify instability and model drift | Week 7 |
-| Produce validation-ready tuning papers | Weeks 8, 9 |
-| Execute a complete TM backtest and calibration exercise | Week 10 |
+```bash
+cd projects/tm-rule-tuning
+pip install -r requirements.txt
+python weeks/week01_tuning_framework.py
+```
 
-### Supplementary material
+Each week runs standalone and prints its own working. Charts and generated
+documents are written to `outputs/`. The week files are Jupyter percent-format,
+so they run as plain Python *and* open as notebooks
+(`jupytext --to notebook weeks/*.py`).
 
-One topic sits outside the ten weeks, in `extras/`:
+Suggested pace is in [Recommended weekly study cadence](#recommended-weekly-study-cadence)
+— roughly four hours a week.
 
-**Above and below-the-line (ATL/BTL) testing** — `extras/atl_btl_testing.py`.
-Below-the-line sampling is normally the first evidence a model validator asks
-for with a threshold change, and it is what turns Week 9's *Limitations — bias
-and assumptions* from an assertion into a measured bound. The spec does not
-include it, so it is supplementary rather than displacing a week. Run it after
-Week 6.
+## Provenance
+
+**All ten weeks are transcribed from the supplied specification.** Each week
+records the spec's Concept, Topics, Exercise, Deliverable and Success Criteria
+as written.
+
+Where a week's script goes beyond the spec it is either building the machinery
+the exercise needs, or reporting something the exercise itself reveals. Those
+additions are called out in `> blockquotes` under the week concerned, so the
+spec and the commentary never blur together.
+
+## The ten weeks
+
+| # | Week | The exercise turns on | Script |
+| --- | --- | --- | --- |
+| 1 | Building the Tuning Framework | Confusion matrix; why accuracy misleads | [`week01_tuning_framework.py`](weeks/week01_tuning_framework.py) |
+| 2 | Rule Backtesting Fundamentals | Alert count, TPs and precision at four thresholds | [`week02_backtesting_fundamentals.py`](weeks/week02_backtesting_fundamentals.py) |
+| 3 | Threshold Optimisation | A £10k–£120k sweep and a justified recommendation | [`week03_threshold_optimisation.py`](weeks/week03_threshold_optimisation.py) |
+| 4 | Alert Volume & Capacity Modelling | 12 investigators × 25 alerts/day | [`week04_capacity_modelling.py`](weeks/week04_capacity_modelling.py) |
+| 5 | Segment-Based Calibration | One threshold versus Retail/Corporate thresholds | [`week05_segment_calibration.py`](weeks/week05_segment_calibration.py) |
+| 6 | Challenger Rule Development | Amount > £30k **AND** velocity > 5 | [`week06_challenger_rules.py`](weeks/week06_challenger_rules.py) |
+| 7 | Stability & Drift Testing | Three years, `ks_2samp`, seasonality | [`week07_stability_and_drift.py`](weeks/week07_stability_and_drift.py) |
+| 8 | Advanced Calibration Using Scoring | A 0.5 / 0.3 / 0.2 weighted score | [`week08_scoring_calibration.py`](weeks/week08_scoring_calibration.py) |
+| 9 | Validation & Governance | A five-section mini tuning paper | [`week09_tuning_papers.py`](weeks/week09_tuning_papers.py) |
+| 10 | Capstone Backtest & Calibration | 100,000 customers, six-step analysis | [`week10_capstone.py`](weeks/week10_capstone.py) |
+
+---
 
 ## Learning Outcomes
 
@@ -46,6 +63,18 @@ By the end of 10 weeks you will be able to:
 - Compare incumbent versus challenger rules
 - Produce validation-ready tuning papers
 - Execute a complete transaction-monitoring backtest and calibration exercise
+
+| Outcome | Covered in |
+| --- | --- |
+| Design labelled and proxy-labelled backtests | Weeks 1, 2 |
+| Tune thresholds using evidence | Week 3 |
+| Quantify precision/recall trade-offs | Weeks 1, 3 |
+| Build alert-volume and risk-yield curves | Weeks 3, 4 |
+| Conduct segment-specific calibration | Week 5 |
+| Compare incumbent versus challenger rules | Week 6 |
+| Identify instability and model drift | Week 7 |
+| Produce validation-ready tuning papers | Weeks 8, 9 |
+| Execute a complete backtest and calibration exercise | Week 10 |
 
 ## Environment Assumption
 
@@ -111,6 +140,11 @@ print(cm)
 - False positive cost
 - Why accuracy is a poor metric in AML
 
+> **Watch the matrix orientation.** `sklearn` returns `[[TN, FP], [FN, TP]]`, so
+> the top-left cell is the *true negative* count, not TP. Published tuning decks
+> misread this corner regularly. Unpack with `.ravel()` rather than reading the
+> grid by eye.
+
 > Run it: `python weeks/week01_tuning_framework.py`
 
 ---
@@ -165,13 +199,15 @@ At thresholds:
 **Success Criteria.** Identify threshold that maximises risk detection under a
 fixed alert volume.
 
-> **A note on this exercise.** In the generator above, `case` is drawn
-> independently of `amount`. Risk and transaction value are statistically
+> **Read the result before acting on it.** In the generator above, `case` is
+> drawn independently of `amount` — risk and transaction value are statistically
 > independent, so precision is flat at the base rate at *every* threshold while
 > recall falls. That flat line is the correct answer to the data, and
-> recognising it is the skill the week builds. Week 2's script demonstrates
-> this, then repeats the exercise on a risk-linked population so the
-> constrained optimisation has something to find.
+> recognising it is the week's real skill: a sweep showing no precision lift
+> means the variable carries no risk signal, which kills the rule rather than
+> inviting you to keep sliding the number. The script demonstrates this, then
+> repeats the exercise on a risk-linked population so the constrained
+> optimisation has something to find.
 
 > Run it: `python weeks/week02_backtesting_fundamentals.py`
 
@@ -214,10 +250,17 @@ Supported by evidence.
 
 **Success Criteria.** Document tuning rationale.
 
-> **A note on the fixed grid.** A £5k step is fine for presenting a result and
-> poor for finding one: it spends 22 candidates evenly across a range the data
-> does not occupy evenly. The week runs the exercise as set, then builds a grid
-> from the data's own quantiles and shows what changes.
+> **On the fixed grid.** A £5k step is fine for presenting a result and poor for
+> finding one: it spends 22 candidates evenly across a range the data does not
+> occupy evenly. Roughly half the customers sit below £10k and are never
+> examined, while the sparse top of the range is sampled far more finely than
+> its handful of customers can support. The week runs the exercise as set, then
+> builds a grid from the data's own quantiles and shows what changes.
+
+> **On marginal yield.** Cumulative precision averages in the productive top of
+> the distribution; *marginal* precision prices only the alerts you are about to
+> add, and is always the worse — and more honest — number. When it falls to the
+> population base rate, the next tranche of alerts is no better than random.
 
 > Run it: `python weeks/week03_threshold_optimisation.py`
 
@@ -254,6 +297,17 @@ Build alert-volume curves.
 - Risk
 - Cost
 - Capacity
+
+> **A queue over capacity never settles.** It does not stabilise at a larger
+> backlog — it grows without limit for as long as the breach continues. In the
+> week's simulation the incumbent rule runs at 4.2× capacity and reaches a
+> 61,000 backlog with a 205-day wait inside three months. Its headline 40%
+> recall is therefore a paper figure: it counts cases sitting in a queue nobody
+> reaches, and a SAR filed on a transaction that old is late.
+
+> **Grid search leaves capacity on the table.** The threshold producing
+> *exactly* capacity is a quantile lookup, not a search. Use a grid to
+> understand the curve's shape; use the quantile to set the number.
 
 > Run it: `python weeks/week04_capacity_modelling.py`
 
@@ -295,12 +349,18 @@ Example:
 **Success Criteria.** Explain improvement achieved without creating unjustified
 complexity.
 
-> **A note on this exercise.** `np.random.rand() > 0.7` assigns the segment at
-> random, with no reference to any customer attribute, so the two segments have
-> near-identical base rates and median amounts. A segmentation uncorrelated with
-> behaviour cannot improve detection however its thresholds are set — and at
-> matched alert volume a single threshold beats it. The week demonstrates that,
-> then repeats the exercise on segments that mean something.
+> **This segmentation is random.** `np.random.rand() > 0.7` assigns the label
+> with no reference to any customer attribute, so the two segments come out with
+> near-identical base rates and median amounts. The £20k/£100k split *looks*
+> like an improvement — it finds more cases — but only because a £20k retail cut
+> is far looser than £50k across 70% of the book. Give the single threshold the
+> same alert budget and it wins outright. A segmentation uncorrelated with
+> behaviour cannot improve detection however its thresholds are set. The week
+> demonstrates that, then repeats on segments that carry real signal.
+
+> **Compare at equal alert budgets, always.** A segmented rule scored against an
+> untuned single threshold firing fewer alerts is not a comparison, it is a
+> rigged one.
 
 > Run it: `python weeks/week05_segment_calibration.py`
 
@@ -338,6 +398,30 @@ Generate:
 - `customer_risk`
 
 Compare both rules.
+
+**Metrics**
+
+Evaluate:
+
+- Precision
+- Recall
+- Volume
+
+**Success Criteria.** Determine whether challenger merits further validation.
+
+> **Netted metrics conceal reallocation.** The challenger nearly doubles
+> precision and roughly halves recall — but the headline figures net gains
+> against losses. Decompose the overlap: the cases it stops catching are
+> high-value, low-velocity customers, which is a coherent typology rather than a
+> random sample of the incumbent's catch. A challenger that systematically drops
+> one typology has narrowed coverage, whatever its precision does.
+
+> **Check field availability before metrics.** A null velocity fails the `AND`
+> closed, silently removing that customer from monitoring — and it fails closed
+> on precisely the population the field was added to identify. Backtests cannot
+> see this, because the test field is always populated.
+
+> **Composite scores appear here in outline only.** Week 8 builds one properly.
 
 > Run it: `python weeks/week06_challenger_rules.py`
 
@@ -378,11 +462,22 @@ from scipy.stats import ks_2samp
 
 **Success Criteria.** Identify unstable thresholds and propose mitigants.
 
-> **A note on the KS test.** Read the KS *statistic*, not the p-value. KS power
-> grows with sample size, so on tens of thousands of records the p-value is
-> vanishing for any difference at all, including differences far too small to
-> move a threshold. The week runs a same-distribution control (a random split of
-> Year 1) to establish the noise floor a real comparison has to clear.
+> **Read the KS statistic, not the p-value.** KS power grows with sample size,
+> so on tens of thousands of records the p-value is vanishing for any difference
+> at all — including differences far too small to move a threshold. The week
+> runs a same-distribution control (a *random* split of Year 1, not a
+> first-half/second-half split, which would carry real seasonal signal) to
+> establish the noise floor a real comparison must clear.
+
+> **Seasonality and drift look identical in a monitoring pack** and need
+> opposite responses. Read the table down a column for the recurring intra-year
+> shape, and across a row for year-on-year movement. Compare like calendar
+> months, never consecutive ones, before proposing a re-tune.
+
+> **Instability is a property of the threshold's position.** A threshold sitting
+> where the distribution is steep converts small behavioural shifts into large
+> volume swings; one further out barely moves. Nothing in a single-period
+> backtest shows this.
 
 > Run it: `python weeks/week07_stability_and_drift.py`
 
@@ -422,12 +517,25 @@ Create:
 **Success Criteria.** Justify chosen cut-off using evidence rather than
 intuition.
 
-> **A note on the components.** They must be made commensurable before they are
-> weighted. Raw pounds alongside a raw transaction count makes the weights
-> decorative — amount decides every alert whatever number sits beside it. The
-> week uses percentile ranks for amount and velocity, and an explicit lookup for
-> the jurisdiction tier, since a tier is an ordered judgement rather than a
-> measurement.
+> **Make the components commensurable before weighting them.** Raw pounds beside
+> a raw transaction count makes the weights decorative — amount would decide
+> every alert whatever number sat next to it. The week uses percentile ranks for
+> amount and velocity (averaging ties, which matters for a discrete count) and
+> an explicit lookup for the jurisdiction tier, since a tier is an ordered
+> judgement rather than a measurement.
+
+> **Weights that do not sum to 1 silently rescale the score,** so a fixed
+> cut-off drifts in meaning between runs. `tmtuning.scoring.weighted_score`
+> refuses them by default.
+
+> **A score has four sets of choices, and a sweep justifies only the last.**
+> Component definitions, weights, combination method, then cut-off. Evidence has
+> to cover all four — and "0.5 performed best" is circular when the weights were
+> chosen on the same data the performance was measured on.
+
+> **Rank boundaries must be fixed from the tuning window.** Percentile ranks
+> computed within each period hold alert volume steady by construction, which
+> hides exactly the drift Week 7 teaches you to detect.
 
 > Run it: `python weeks/week08_scoring_calibration.py`
 
@@ -466,6 +574,18 @@ Write a mini tuning paper containing:
 
 **Success Criteria.** Produce validation-ready documentation.
 
+> **A substantial limitations section makes a paper more credible, not less.**
+> A validator's job is to find what the author missed; naming the weaknesses
+> first turns their findings into confirmations and moves the conversation to
+> whether the residual risk is acceptable — which is a decision the risk owner
+> can actually take. State the limitation, quantify the *direction* of its bias,
+> then say what you did about it.
+
+> **Generate the document from the analysis; never retype it.** Transcription
+> errors are the most common defect in tuning papers and are always found by the
+> validator rather than the author. It also means anything the analysis did not
+> produce cannot quietly appear in the paper.
+
 > Run it: `python weeks/week09_tuning_papers.py`
 
 ---
@@ -499,21 +619,61 @@ Constraints:
 - Senior management expects volume reduction
 - Missed-risk tolerance limited
 
-**Required Analysis**
+### Required Analysis
 
-**1. Baseline Assessment** — report alert volume, precision, recall, FPR
+**1. Baseline Assessment**
 
-**2. Threshold Sweep** — evaluate £10k, £15k, £20k, £25k, £30k
+Report:
 
-**3. Segment Calibration** — compare global, retail and corporate thresholds
+- Alert volume
+- Precision
+- Recall
+- FPR
 
-**4. Challenger Design** — cash threshold **+** velocity condition
+**2. Threshold Sweep**
 
-**5. Stability Testing** — run across Q1, Q2, Q3, Q4
+Evaluate:
 
-**6. Recommendation** — present:
+- £10k
+- £15k
+- £20k
+- £25k
+- £30k
 
-*Proposed Calibration.* Example: Retail = £15k, Corporate = £35k, Velocity > 3
+**3. Segment Calibration**
+
+Compare:
+
+- Global threshold
+- Retail threshold
+- Corporate threshold
+
+**4. Challenger Design**
+
+Create:
+
+> Cash threshold
+> **+**
+> Velocity condition
+
+**5. Stability Testing**
+
+Run across:
+
+- Q1
+- Q2
+- Q3
+- Q4
+
+**6. Recommendation**
+
+Present:
+
+*Proposed Calibration.* Example:
+
+- Retail = £15k
+- Corporate = £35k
+- Velocity > 3
 
 *Impact.*
 
@@ -524,26 +684,57 @@ Constraints:
 | Recall | | |
 | FPR | | |
 
-*Risks.* Potential blind spots, data limitations, monitoring requirements.
+*Risks.*
 
-> **A note on the example calibration.** Run faithfully, Retail £15k /
+- Potential blind spots
+- Data limitations
+- Monitoring requirements
+
+> **The example calibration over-corrects.** Run faithfully, Retail £15k /
 > Corporate £35k / velocity > 3 cuts alert volume by 94% — and uses only 10% of
 > the investigation capacity that was supposedly the binding constraint, while
-> recall falls 59 percentage points. It satisfies "volume reduction" by
-> overshooting it, and fails "missed-risk tolerance limited". The week evaluates
-> it as set, then searches the design space for a calibration that actually
-> spends the allocation, and recommends that instead.
+> recall falls 59 percentage points and 1,762 additional cases go unalerted. It
+> satisfies "volume reduction" by overshooting it and fails "missed-risk
+> tolerance limited". The week evaluates it as set, records it in the decision
+> log as rejected with reasons, then searches the design space and recommends a
+> calibration that spends the allocation — recovering 33pp of recall.
 
-> **A note on sizing.** Select on the Q4 run-rate, not the twelve-month average.
-> The population drifts through the year, so a design averaging inside capacity
-> across four quarters can still breach it on the day it goes live — 10 of the
-> 85 designs tested do exactly that.
+> **Size on the Q4 run-rate, not the twelve-month average.** The population
+> drifts through the year, so a design averaging inside capacity across four
+> quarters can still breach it on the day it goes live. 10 of the 85 designs
+> tested do exactly that.
+
+> **`Alert Outcome` is circular.** It is a function of the incumbent rule: every
+> record below £10k reads "NO ALERT" because nobody looked, not because it was
+> reviewed and cleared. Treating that as evidence of no risk is the easiest way
+> to make a capstone answer look better than it is.
 
 > Run it: `python weeks/week10_capstone.py`
 
 ---
 
-## RECOMMENDED WEEKLY STUDY CADENCE
+## Supplementary material
+
+One topic sits outside the ten weeks, in `extras/`.
+
+**Above and below-the-line (ATL/BTL) testing** —
+[`extras/atl_btl_testing.py`](extras/atl_btl_testing.py).
+
+Below-the-line sampling is normally the first evidence a model validator asks
+for with a threshold change, and it is what turns Week 9's *Limitations — bias
+and assumptions* from an assertion into a measured bound. The spec does not
+include it, so it is supplementary rather than displacing a week. Run it after
+Week 6.
+
+It also carries two points that transfer directly into the capstone: use Wilson
+intervals rather than the textbook Wald interval (which returns a zero-width
+`[0, 0]` when a sample turns up no cases, implying certainty that nothing sits
+below the line), and never difference two sampled estimates when the effect is
+smaller than either one's confidence interval.
+
+---
+
+## Recommended weekly study cadence
 
 | When | Time | What |
 | --- | --- | --- |
@@ -552,14 +743,15 @@ Constraints:
 | **Friday** | 1–2 hours | Complete the exercise and document findings |
 | **Weekend** | 30 minutes | Write a one-page tuning recommendation |
 
-Roughly 3.5–4.5 hours a week. The Friday and weekend slots are the ones that
-build the skill that transfers: running a sweep is quick, but deciding what the
-numbers license you to claim — and writing it down so somebody else can
-challenge it — is the part the job actually consists of.
+Roughly 3.5–4.5 hours a week.
+
+The Friday and weekend slots build the skill that transfers. Running a sweep is
+quick; deciding what the numbers license you to claim, and writing it down so
+somebody else can challenge it, is what the job actually consists of.
 
 ---
 
-## STRETCH GOALS (ADVANCED PRACTITIONER LEVEL)
+## Stretch goals (advanced practitioner level)
 
 - Bayesian threshold optimisation
 - Isolation Forest challengers
@@ -572,24 +764,27 @@ challenge it — is the part the job actually consists of.
 Two of these are already built into the course rather than left as stretch:
 **PSI** runs throughout Week 7 (`tmtuning.stability.psi`), and
 **champion-challenger** is Week 6's whole subject. The remaining five are
-genuine extensions — the natural next build after Week 10.
+genuine extensions, and the natural next build after Week 10.
 
 ---
 
-## RECOMMENDED HABIT
+## Recommended habit
 
 > Maintain a **"Tuning Decision Log"** recording every threshold tested,
 > observed metric changes, operational implications, assumptions and final
 > rationale. This provides the evidence trail typically expected by model
 > validation, compliance governance and audit functions.
 
-This one is implemented rather than merely described: `tmtuning.decision_log`
+This one is implemented rather than merely described. `tmtuning.decision_log`
 provides `TuningDecisionLog`, and Week 10 records every option it tests through
 it — including the ones it rejects — then exports the log to markdown alongside
-the tuning paper.
+the tuning paper. A worked example is in
+[`docs/example_decision_log.md`](docs/example_decision_log.md).
 
 The reason it matters is narrow and practical. A tuning paper reports the option
 that won. The decision log reports the options that lost and why, which is what
 somebody needs three years later when the author has moved on and the question
-is "why £20,000?". Kept as you go it costs nothing; reconstructed afterwards it
-is guesswork dressed as evidence, and a reader can tell which happened.
+is "why £20,000?".
+
+Kept as you go it costs nothing. Reconstructed afterwards it is guesswork
+dressed as evidence — and a reader can always tell which happened.
