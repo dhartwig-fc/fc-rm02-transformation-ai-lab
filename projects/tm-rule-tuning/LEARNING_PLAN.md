@@ -480,22 +480,116 @@ Existing rule:
 
 > Cash deposits > £10k in 30 days
 
-**Steps**
+Population: 100,000 customers
 
-1. Build the sample and profile it
-2. Backtest the incumbent; diagnose drift versus decay
-3. Sweep and select under the capacity constraint
-4. Validate out of time
-5. Calibrate by segment
-6. Test below the line — and measure the incremental change directly
-7. Compare against a challenger
-8. Recommend, and generate the paper
+Fields:
 
-> **A note on incremental risk.** Differencing two sampled below-the-line
-> estimates is the intuitive way to price a threshold change and it does not
-> work: the sampling error is routinely larger than the effect. Tightening a
-> threshold means the records you stop alerting on were *above* the historical
-> line, so they carry real dispositions — count them rather than sampling them.
-> Only loosening requires an estimate.
+- Customer ID
+- Segment
+- Country Risk
+- Cash Deposits
+- Wire Activity
+- Velocity
+- Alert Outcome
+- Case Outcome
+
+Constraints:
+
+- Investigation capacity fixed
+- Senior management expects volume reduction
+- Missed-risk tolerance limited
+
+**Required Analysis**
+
+**1. Baseline Assessment** — report alert volume, precision, recall, FPR
+
+**2. Threshold Sweep** — evaluate £10k, £15k, £20k, £25k, £30k
+
+**3. Segment Calibration** — compare global, retail and corporate thresholds
+
+**4. Challenger Design** — cash threshold **+** velocity condition
+
+**5. Stability Testing** — run across Q1, Q2, Q3, Q4
+
+**6. Recommendation** — present:
+
+*Proposed Calibration.* Example: Retail = £15k, Corporate = £35k, Velocity > 3
+
+*Impact.*
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Alerts | | |
+| Precision | | |
+| Recall | | |
+| FPR | | |
+
+*Risks.* Potential blind spots, data limitations, monitoring requirements.
+
+> **A note on the example calibration.** Run faithfully, Retail £15k /
+> Corporate £35k / velocity > 3 cuts alert volume by 94% — and uses only 10% of
+> the investigation capacity that was supposedly the binding constraint, while
+> recall falls 59 percentage points. It satisfies "volume reduction" by
+> overshooting it, and fails "missed-risk tolerance limited". The week evaluates
+> it as set, then searches the design space for a calibration that actually
+> spends the allocation, and recommends that instead.
+
+> **A note on sizing.** Select on the Q4 run-rate, not the twelve-month average.
+> The population drifts through the year, so a design averaging inside capacity
+> across four quarters can still breach it on the day it goes live — 10 of the
+> 85 designs tested do exactly that.
 
 > Run it: `python weeks/week10_capstone.py`
+
+---
+
+## RECOMMENDED WEEKLY STUDY CADENCE
+
+| When | Time | What |
+| --- | --- | --- |
+| **Monday** | 1 hour | Read theory and regulatory/model-governance materials |
+| **Wednesday** | 1 hour | Work through the Python example |
+| **Friday** | 1–2 hours | Complete the exercise and document findings |
+| **Weekend** | 30 minutes | Write a one-page tuning recommendation |
+
+Roughly 3.5–4.5 hours a week. The Friday and weekend slots are the ones that
+build the skill that transfers: running a sweep is quick, but deciding what the
+numbers license you to claim — and writing it down so somebody else can
+challenge it — is the part the job actually consists of.
+
+---
+
+## STRETCH GOALS (ADVANCED PRACTITIONER LEVEL)
+
+- Bayesian threshold optimisation
+- Isolation Forest challengers
+- Graph/network-based monitoring
+- Dynamic peer-group thresholds
+- Population Stability Index (PSI)
+- Champion-challenger frameworks
+- Explainable machine-learning models for TM optimisation
+
+Two of these are already built into the course rather than left as stretch:
+**PSI** runs throughout Week 7 (`tmtuning.stability.psi`), and
+**champion-challenger** is Week 6's whole subject. The remaining five are
+genuine extensions — the natural next build after Week 10.
+
+---
+
+## RECOMMENDED HABIT
+
+> Maintain a **"Tuning Decision Log"** recording every threshold tested,
+> observed metric changes, operational implications, assumptions and final
+> rationale. This provides the evidence trail typically expected by model
+> validation, compliance governance and audit functions.
+
+This one is implemented rather than merely described: `tmtuning.decision_log`
+provides `TuningDecisionLog`, and Week 10 records every option it tests through
+it — including the ones it rejects — then exports the log to markdown alongside
+the tuning paper.
+
+The reason it matters is narrow and practical. A tuning paper reports the option
+that won. The decision log reports the options that lost and why, which is what
+somebody needs three years later when the author has moved on and the question
+is "why £20,000?". Kept as you go it costs nothing; reconstructed afterwards it
+is guesswork dressed as evidence, and a reader can tell which happened.

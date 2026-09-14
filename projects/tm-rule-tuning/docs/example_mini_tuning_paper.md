@@ -1,8 +1,9 @@
 <!--
-  Reference copy of the Week 9 mini tuning paper -- the five-section form the
-  specification asks for. GENERATED; regenerate with:
+  Reference copy of the Week 9 mini tuning paper -- the five-section form the specification asks for.
+  GENERATED -- do not edit by hand. Regenerate by running the week script.
 
-      python weeks/week09_tuning_papers.py
+  Figures come from a synthetic population; they illustrate the shape of the
+  argument, not any real portfolio.
 -->
 
 # Mini Tuning Paper: TM-014 High Value Outbound Wires

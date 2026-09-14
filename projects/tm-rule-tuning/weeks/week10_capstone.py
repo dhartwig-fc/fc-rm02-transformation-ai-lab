@@ -1,21 +1,32 @@
 # %% [markdown]
-# # Week 10 -- Capstone: Complete Backtest and Calibration Exercise
+# # Week 10 -- Capstone Backtest and Calibration Project
 #
-# **The brief.**
+# **Objective.** Complete an end-to-end transaction-monitoring tuning
+# engagement.
 #
-# > Rule TM-014 (*monthly outbound wires > £50,000*) has been in production for
-# > two years without re-tuning. Operations report the alert queue is growing
-# > and investigators say yield has fallen. Capacity is 2,500 alerts per month
-# > and there is no budget for more.
-# >
-# > Determine whether the rule is still fit for purpose, recommend a
-# > calibration, and produce a paper for independent validation.
+# ## Capstone scenario
 #
-# This runs the whole method end to end. Nothing new is introduced -- every
-# step is a week you have already done.
+# Existing rule:
 #
-# **Success criteria.** A defensible recommendation, evidence for each of the
-# ten validation areas from Week 9, and a generated paper.
+# > **Cash deposits > £10k in 30 days**
+#
+# Population: 100,000 customers, with fields for Customer ID, Segment, Country
+# Risk, Cash Deposits, Wire Activity, Velocity, Alert Outcome and Case Outcome.
+#
+# Constraints:
+#
+# * Investigation capacity fixed
+# * Senior management expects volume reduction
+# * Missed-risk tolerance limited
+#
+# ## Required analysis
+#
+# 1. Baseline assessment -- alert volume, precision, recall, FPR
+# 2. Threshold sweep -- £10k, £15k, £20k, £25k, £30k
+# 3. Segment calibration -- global, retail and corporate thresholds
+# 4. Challenger design -- cash threshold + velocity condition
+# 5. Stability testing -- Q1, Q2, Q3, Q4
+# 6. Recommendation -- proposed calibration, impact and risks
 
 # %%
 # --- path bootstrap ---
@@ -31,412 +42,678 @@ for _p in pathlib.Path(__file__ if "__file__" in globals() else "x").resolve().p
 import numpy as np
 import pandas as pd
 
-from tmtuning import (answer, banner, apply_rule, btl_test, calibrate_segments,
-                      classification_metrics, compare_rules, compare_uniform_vs_segmented,
-                      generate_population, marginal_yield, optimise_threshold, required_sample_size,
-                      rule_overlap, save_paper, segment_summary, show, split_by_period,
-                      stability_report, threshold_sweep, tuning_paper)
-from tmtuning.plots import (plot_alert_volume_curve, plot_precision_recall_tradeoff,
-                            plot_risk_yield_curve, plot_segment_curves, plot_stability_chart, save)
-from tmtuning.segments import segment_sweeps
+from tmtuning import (answer, banner, apply_rule, classification_metrics, generate_population,
+                      mini_tuning_paper, save_paper, show, threshold_sweep, TuningDecisionLog)
+from tmtuning.plots import plot_alert_volume_curve, plot_stability_chart, save
+from tmtuning.stability import stability_report
 
 OUT = _ROOT / "outputs"
-# Capacity allocated to THIS rule, not the whole team. The Week 4 team of 12
-# investigators can work 12 * 25 * 21 = 6,300 alerts a month across all 18
-# rules in the estate; TM-014's agreed share of that queue is 350. Tuning a
-# single rule against the whole team's capacity is a common and expensive
-# error -- it implicitly assumes every other rule stops firing.
-INVESTIGATORS = 12
-ALERTS_PER_DAY_EACH = 25
-WORKING_DAYS = 21
-RULES_IN_ESTATE = 18
-TEAM_CAPACITY = INVESTIGATORS * ALERTS_PER_DAY_EACH * WORKING_DAYS
-CAPACITY = 350          # TM-014's allocated share of the monthly queue
-CURRENT_THRESHOLD = 10_000   # cash deposits > £10k in 30 days
-SCORE_COL = "monthly_cash_deposits"
+
+CURRENT_THRESHOLD = 10_000        # cash deposits > £10k in 30 days
+SWEEP_THRESHOLDS = [10_000, 15_000, 20_000, 25_000, 30_000]
+
+# Constraint 1: investigation capacity is fixed. The team of 12 works
+# 12 * 25 * 21 = 6,300 alerts a month across the whole rule estate; TM-021's
+# agreed share of that queue is 1,500.
+TEAM_CAPACITY = 12 * 25 * 21
+CAPACITY = 1_500
+
+log = TuningDecisionLog(rule="TM-021 Cash Deposit Structuring", author="Dan Hartwig")
 
 # %% [markdown]
-# ## Step 1 -- Build the sample and profile it
+# ## Population
 
 # %%
-banner("STEP 1: SAMPLE AND PROFILE")
+banner("POPULATION")
 
-print(f"  Team capacity     {TEAM_CAPACITY:,} alerts/month "
-      f"({INVESTIGATORS} investigators x {ALERTS_PER_DAY_EACH}/day x {WORKING_DAYS} days)")
-print(f"  Rules in estate   {RULES_IN_ESTATE}")
-print(f"  TM-021 allocation {CAPACITY:,} alerts/month "
-      f"({CAPACITY / TEAM_CAPACITY:.1%} of the team's queue)\n")
+population = generate_population(n=100_000, seed=1010, n_periods=12,
+                                 start_period="2025-01", drift_strength=1.2)
+population["quarter"] = "Q" + (population["period_index"] // 3 + 1).astype(str)
 
-# Two years of data, with drift -- which is the complaint being investigated.
-population = generate_population(n=60_000, seed=1010, n_periods=24,
-                                 start_period="2024-01", drift_strength=1.4)
-in_time, out_of_time = split_by_period(population, holdout_periods=6)
+# The spec's two-segment view: personal banking versus everything commercial.
+population["segment_group"] = np.where(population["segment"] == "RETAIL", "Retail", "Corporate")
 
-print(f"  Sample          {len(population):,} customer-months over 24 periods")
-print(f"  True cases      {population['case'].sum():,} ({population['case'].mean():.2%} base rate)")
-print(f"  Tuning window   {in_time['period'].min()} to {in_time['period'].max()} ({len(in_time):,} rows)")
-print(f"  Holdout         {out_of_time['period'].min()} to {out_of_time['period'].max()} ({len(out_of_time):,} rows)")
+# Alert Outcome is the disposition the INCUMBENT rule produced. It is derived
+# from the incumbent, not given -- which is the whole point of section 1's
+# warning: the outcome field only exists for records the live rule alerted on.
+incumbent_flags = np.asarray(apply_rule(population["monthly_cash_deposits"], CURRENT_THRESHOLD))
+population["alert_outcome"] = np.select(
+    [~incumbent_flags, incumbent_flags & (population["case"] == 1)],
+    ["NO ALERT", "SAR FILED"], default="CLOSED - NO ACTION")
+population["case_outcome"] = np.where(population["case"] == 1, "CASE", "NO CASE")
 
-show(segment_summary(population, value_col=SCORE_COL).reset_index(), "\nSegment profile")
+capstone = population.rename(columns={
+    "customer_id": "Customer ID", "segment_group": "Segment",
+    "jurisdiction_risk": "Country Risk", "monthly_cash_deposits": "Cash Deposits",
+    "monthly_wire_value": "Wire Activity", "velocity": "Velocity",
+    "alert_outcome": "Alert Outcome", "case_outcome": "Case Outcome",
+})
+show(capstone[["Customer ID", "Segment", "Country Risk", "Cash Deposits", "Wire Activity",
+               "Velocity", "Alert Outcome", "Case Outcome"]].head(6),
+     "The eight specified fields")
 
-# %% [markdown]
-# ## Step 2 -- Backtest the incumbent
+print(f"\n  Records          {len(population):,} customer-months across 4 quarters")
+print(f"  True cases       {population['case'].sum():,} ({population['case'].mean():.2%} base rate)")
+print(f"  Team capacity    {TEAM_CAPACITY:,} alerts/month across the estate")
+print(f"  TM-021 allocated {CAPACITY:,} alerts/month ({CAPACITY / TEAM_CAPACITY:.0%} of the queue)")
 
-# %%
-banner("STEP 2: INCUMBENT PERFORMANCE")
-
-current_flags = apply_rule(in_time[SCORE_COL], CURRENT_THRESHOLD)
-current_metrics = classification_metrics(in_time["case"], current_flags)
-
-print(f"  Rule TM-021 at £{CURRENT_THRESHOLD:,} over the tuning window:\n")
-monthly_now = current_metrics["alerts"] / in_time["period"].nunique()
-print(f"    Alerts              {current_metrics['alerts']:,} over {in_time['period'].nunique()} periods")
-print(f"    Monthly average     {monthly_now:,.0f}  (capacity {CAPACITY:,})")
-print(f"    Capacity position   {monthly_now / CAPACITY - 1:+.0%} against capacity")
-print(f"    Precision           {current_metrics['precision']:.2%}")
-print(f"    Recall              {current_metrics['recall']:.2%}")
-print(f"    Effort per case     {current_metrics['alerts_per_true_positive']:.1f} alerts")
-
-incumbent_stability = stability_report(population, CURRENT_THRESHOLD, score_col=SCORE_COL, baseline_periods=6)
-save(plot_stability_chart(incumbent_stability, metric="alerts",
-                          title="TM-014 alert volume -- incumbent threshold"),
-     OUT / "week10_incumbent_stability.png")
-
-first_six = incumbent_stability.head(6)["alerts"].mean()
-last_six = incumbent_stability.tail(6)["alerts"].mean()
-print(f"\n  Monthly alert volume: {first_six:,.0f} (first 6 periods) -> "
-      f"{last_six:,.0f} (last 6)  [{last_six / first_six - 1:+.0%}]")
-print(f"  Periods breaching control limits: "
-      f"{int(incumbent_stability['any_breach'].sum())} of {len(incumbent_stability)}")
-print(f"  PSI in final period: {incumbent_stability.iloc[-1]['psi']:.2f} "
-      f"({incumbent_stability.iloc[-1]['band']})")
+show(population.groupby("Segment" if "Segment" in population else "segment_group").agg(
+        records=("case", "size"), cases=("case", "sum"), prevalence=("case", "mean"),
+        median_cash=("monthly_cash_deposits", "median")).reset_index(),
+     "\nSegment profile")
 
 print("""
-  FINDING: Alert volume has grown well past capacity while precision has
-  broadly held. PSI is in the significant band. That signature -- population
-  moved, rule logic still sound -- is population drift, not rule decay. The
-  threshold is stale rather than wrong in kind, so re-tuning is the right
-  remedy (Week 7).
+  A note on Alert Outcome before using it. It is a function of the incumbent
+  rule: every record below £10,000 reads "NO ALERT", not because it was
+  reviewed and cleared but because nobody looked. Treating "NO ALERT" as
+  evidence of no risk is the circularity Week 1 warned about, and it is the
+  single easiest way to make a capstone answer look better than it is.
 """)
 
 # %% [markdown]
-# ## Step 3 -- Sweep and select under the capacity constraint
+# ## 1. Baseline assessment
 
 # %%
-banner("STEP 3: THRESHOLD SELECTION")
+banner("1. BASELINE ASSESSMENT")
 
-sweep = threshold_sweep(in_time, SCORE_COL, "case", n_thresholds=50)
-periods_in_time = in_time["period"].nunique()
-budget = CAPACITY * periods_in_time  # capacity is monthly; the sweep spans the window
+baseline = classification_metrics(population["case"], incumbent_flags)
+print(f"  Rule: cash deposits > £{CURRENT_THRESHOLD:,} in 30 days\n")
+print(f"    Alert volume   {baseline['alerts']:,} over 12 periods "
+      f"({baseline['alerts'] / 12:,.0f} per month)")
+print(f"    Precision      {baseline['precision']:.2%}")
+print(f"    Recall         {baseline['recall']:.2%}")
+print(f"    FPR            {baseline['fpr']:.2%}")
+print(f"\n    Against the {CAPACITY:,}/month allocation: "
+      f"{baseline['alerts'] / 12 / CAPACITY:.0%} of capacity "
+      f"({baseline['alerts'] / 12 - CAPACITY:+,.0f} alerts/month)")
 
-recommended = optimise_threshold(sweep, objective="recall", max_alerts=budget)
-print(f"  Constraint: <= {CAPACITY:,} alerts/month x {periods_in_time} periods = {budget:,}")
-print(f"  Objective : maximise recall\n")
-print(f"    Recommended threshold  £{recommended['threshold']:,.0f}")
-print(f"    Alerts                 {int(recommended['alerts']):,} "
-      f"({recommended['alerts'] / periods_in_time:,.0f} per month)")
-print(f"    Precision              {recommended['precision']:.2%}")
-print(f"    Recall                 {recommended['recall']:.2%}")
+log.record("1. Baseline", f"cash > £{CURRENT_THRESHOLD:,} (incumbent)", baseline,
+           operational_implication=f"{baseline['alerts'] / 12:,.0f} alerts/month against a "
+                                   f"{CAPACITY:,} allocation -- {baseline['alerts'] / 12 / CAPACITY:.0%} of capacity.",
+           assumptions="Case label = SAR/STR filed within 90 days of the alert period.",
+           outcome="for information",
+           rationale="Baseline as currently running. Breaches capacity; volume reduction required.")
 
-marginal = marginal_yield(sweep)
-at_point = marginal.loc[(marginal["threshold"] - recommended["threshold"]).abs().idxmin()]
-print(f"    Marginal precision     {at_point['marginal_precision']:.2%} "
-      f"(base rate {in_time['case'].mean():.2%})")
-
-for name, fig in [
-    ("week10_alert_volume.png", plot_alert_volume_curve(sweep, capacity=budget)),
-    ("week10_risk_yield.png", plot_risk_yield_curve(sweep)),
-    ("week10_precision_recall.png", plot_precision_recall_tradeoff(sweep)),
-]:
-    save(fig, OUT / name)
+print("""
+  FPR is reported because the spec asks for it, and it is the metric most often
+  misread in this pack. 25.6% sounds catastrophic beside a 7.7% precision, but
+  the two answer different questions: FPR is unproductive alerts as a share of
+  all NON-cases, and non-cases are 97% of the book. At AML base rates FPR is
+  almost a restatement of the alert rate, and it moves very little whatever the
+  threshold does. Precision is what tells you about investigator experience.
+""")
 
 # %% [markdown]
-# ## Step 4 -- Out-of-time validation
+# ## 2. Threshold sweep
 
 # %%
-banner("STEP 4: OUT-OF-TIME VALIDATION")
+banner("2. THRESHOLD SWEEP")
 
-threshold = float(recommended["threshold"])
-oot = pd.DataFrame([
-    {"sample": "In-time",
-     **classification_metrics(in_time["case"], apply_rule(in_time[SCORE_COL], threshold))},
-    {"sample": "Out-of-time",
-     **classification_metrics(out_of_time["case"], apply_rule(out_of_time[SCORE_COL], threshold))},
-])
-show(oot[["sample", "alerts", "tp", "precision", "recall", "alert_rate", "alerts_per_true_positive"]],
-     f"Threshold £{threshold:,.0f} on both samples (compare RATES, not counts)")
+sweep = threshold_sweep(population, "monthly_cash_deposits", "case",
+                        thresholds=SWEEP_THRESHOLDS)
+sweep["alerts_per_month"] = sweep["alerts"] / 12
+sweep["pct_of_capacity"] = sweep["alerts_per_month"] / CAPACITY
+show(sweep[["threshold", "alerts", "alerts_per_month", "pct_of_capacity",
+            "precision", "recall", "fpr"]],
+     "The five thresholds the spec asks for")
 
-change = (oot.loc[1, "precision"] - oot.loc[0, "precision"]) * 100
-print(f"\n  Precision change out of time: {change:+.2f}pp")
+for _, row in sweep.iterrows():
+    fits = row["alerts_per_month"] <= CAPACITY
+    log.record("2. Threshold sweep", f"cash > £{row['threshold']:,.0f}", row.to_dict(),
+               operational_implication=f"{row['alerts_per_month']:,.0f} alerts/month "
+                                       f"({row['pct_of_capacity']:.0%} of allocation).",
+               outcome="carried forward" if fits else "rejected",
+               rationale=("Fits the allocation." if fits
+                          else "Exceeds the fixed investigation capacity."))
 
-oot_rate = oot.loc[1, "alert_rate"] * len(out_of_time) / out_of_time["period"].nunique()
-print(f"  Implied monthly volume in the holdout: {oot_rate:,.0f} (capacity {CAPACITY:,})")
-if oot_rate > CAPACITY:
-    print("\n  WARNING: the threshold fits capacity in the tuning window but NOT in the")
-    print("  holdout, because drift continued. Tune on the most recent periods, not")
-    print("  the full history, when the population is known to be moving.")
+feasible = sweep[sweep["alerts_per_month"] <= CAPACITY]
+best_global = feasible.sort_values("recall", ascending=False).iloc[0]
+print(f"\n  Highest-recall global threshold within capacity: £{best_global['threshold']:,.0f}")
+print(f"    {best_global['alerts_per_month']:,.0f} alerts/month, "
+      f"recall {best_global['recall']:.2%}, precision {best_global['precision']:.2%}")
+print(f"    Recall given up against the incumbent: "
+      f"{(baseline['recall'] - best_global['recall']) * 100:.1f}pp")
+
+full_sweep = threshold_sweep(population, "monthly_cash_deposits", "case", n_thresholds=60)
+save(plot_alert_volume_curve(full_sweep, capacity=CAPACITY * 12,
+                             title="TM-021 alert volume against allocated capacity"),
+     OUT / "week10_alert_volume.png")
 
 # %% [markdown]
-# ## Step 5 -- Segment calibration
+# ## 3. Segment calibration
 
 # %%
-banner("STEP 5: SEGMENT CALIBRATION")
+banner("3. SEGMENT CALIBRATION")
 
-segment_comparison = compare_uniform_vs_segmented(in_time, capacity=budget, score_col=SCORE_COL)
-show(segment_comparison[["segment", "threshold_uniform", "alerts_uniform", "tp_uniform",
-                         "threshold_segmented", "alerts_segmented", "tp_segmented", "uplift_tp"]],
-     f"Same {budget:,} alert budget, allocated two ways")
+retail = population[population["segment_group"] == "Retail"]
+corporate = population[population["segment_group"] == "Corporate"]
+print(f"  Retail    {len(retail):>7,} records, median cash deposits "
+      f"£{retail['monthly_cash_deposits'].median():>9,.0f}, prevalence {retail['case'].mean():.2%}")
+print(f"  Corporate {len(corporate):>7,} records, median cash deposits "
+      f"£{corporate['monthly_cash_deposits'].median():>9,.0f}, prevalence {corporate['case'].mean():.2%}")
 
-total = segment_comparison[segment_comparison["segment"] == "TOTAL"].iloc[0]
-uplift_pct = total["uplift_tp"] / max(total["tp_uniform"], 1)
-print(f"\n  Detection uplift from segmentation: {int(total['uplift_tp']):+,} cases "
-      f"({uplift_pct:+.1%}) at the same alert volume")
 
-save(plot_segment_curves(segment_sweeps(in_time, score_col=SCORE_COL)), OUT / "week10_segment_curves.png")
+def evaluate_segmented(retail_cut: float, corporate_cut: float) -> dict:
+    """Score a two-threshold rule across the whole population."""
+    flags = np.where(population["segment_group"] == "Retail",
+                     population["monthly_cash_deposits"] > retail_cut,
+                     population["monthly_cash_deposits"] > corporate_cut)
+    return classification_metrics(population["case"], flags)
+
+
+rows = [{"option": f"Global £{best_global['threshold']:,.0f}",
+         **classification_metrics(population["case"],
+                                  apply_rule(population["monthly_cash_deposits"],
+                                             best_global["threshold"]))}]
+for retail_cut, corporate_cut in [(10_000, 25_000), (15_000, 35_000), (20_000, 40_000)]:
+    rows.append({"option": f"Retail £{retail_cut:,} / Corporate £{corporate_cut:,}",
+                 **evaluate_segmented(retail_cut, corporate_cut)})
+
+segment_options = pd.DataFrame(rows)
+segment_options["alerts_per_month"] = segment_options["alerts"] / 12
+show(segment_options[["option", "alerts", "alerts_per_month", "precision", "recall", "fpr"]],
+     "Global versus segment-specific thresholds")
+
+for _, row in segment_options.iterrows():
+    fits = row["alerts_per_month"] <= CAPACITY
+    log.record("3. Segment calibration", row["option"], row.to_dict(),
+               operational_implication=f"{row['alerts_per_month']:,.0f} alerts/month.",
+               assumptions="Segment assignment is accurate and stable; it becomes an AML control.",
+               outcome="carried forward" if fits else "rejected",
+               rationale=("Within capacity." if fits else "Exceeds capacity."))
+
+print("""
+  Compare these at capacity, not at face value. A segmented option firing more
+  alerts than the global one will find more cases, and that is arithmetic
+  rather than calibration. The question is whether it finds more for the same
+  investigator effort.
+""")
 
 # %% [markdown]
-# ## Step 6 -- Below-the-line testing
-
-# %%
-banner("STEP 6: BELOW-THE-LINE TESTING")
-
-planned_n = required_sample_size(expected_rate=0.02, margin_of_error=0.01, confidence=0.95)
-print(f"  Sample size planned for +/-1pp at 95% on an expected 2% rate: {planned_n:,} records")
-
-recommended_flags = apply_rule(in_time[SCORE_COL], threshold)
-btl = btl_test(in_time, recommended_flags, n_below=planned_n, seed=1010)
-
-print(f"\n  Below-the-line population   {btl['below_the_line_population']:,}")
-print(f"  Reviewed                    {btl['sampled']:,}")
-print(f"  True cases found            {btl['productive_in_sample']:,}")
-print(f"  Rate                        {btl['observed_rate']:.2%} "
-      f"(95% CI {btl['rate_lower']:.2%} to {btl['rate_upper']:.2%})")
-print(f"  Estimated missed cases      {btl['estimated_missed_cases']:,.0f}")
-print(f"  Upper bound                 {btl['estimated_missed_cases_upper']:,.0f}  <- quote this one")
-
-# %% [markdown]
-# ### Incremental impact: measure it, do not sample it
+# ## 4. Challenger design
 #
-# The sampled estimate above bounds the *absolute* missed risk below the new
-# line. It is the wrong tool for the *incremental* question -- what this change
-# costs relative to today -- and using it there produces nonsense.
+# Cash threshold **+** velocity condition.
 
 # %%
-banner("STEP 6b: INCREMENTAL RISK OF THE CHANGE")
+banner("4. CHALLENGER DESIGN")
 
-naive_current = btl_test(in_time, current_flags, n_below=planned_n, seed=1010)
-naive_delta = btl["estimated_missed_cases_upper"] - naive_current["estimated_missed_cases_upper"]
-# Width of each sampled estimate, to compare against the effect being measured.
-naive_width = (btl["rate_upper"] - btl["rate_lower"]) * btl["below_the_line_population"]
-tightening = threshold > CURRENT_THRESHOLD
+velocity_profile = pd.DataFrame([
+    {"condition": f"velocity > {v}",
+     "keeps": (population["velocity"] > v).mean(),
+     "case_rate_kept": population.loc[population["velocity"] > v, "case"].mean(),
+     "case_rate_excluded": population.loc[population["velocity"] <= v, "case"].mean()}
+    for v in (0, 1, 2, 3)
+])
+velocity_profile["lift"] = velocity_profile["case_rate_kept"] / velocity_profile["case_rate_excluded"]
+show(velocity_profile, "What each velocity floor does on its own")
 
-print("  Naive approach -- two separate BTL samples:")
-print(f"    incumbent upper bound   {naive_current['estimated_missed_cases_upper']:,.0f}")
-print(f"    recommended upper bound {btl['estimated_missed_cases_upper']:,.0f}")
-print(f"    apparent difference     {naive_delta:+,.0f}")
-print(f"    width of ONE estimate's own 95% interval: {naive_width:,.0f} cases")
+print("""
+  Note what `velocity > 0` does, because it looks trivial and is not. It keeps
+  any customer with at least one outbound transaction, excluding those with
+  none -- and that excluded group has a far lower case rate.
 
-if tightening and naive_delta < 0:
-    print("""
-  That difference has the wrong SIGN. The recommendation tightens the
-  threshold, so it must miss at least as much as the incumbent -- a strict
-  superset of records falls below the line. A negative number here is simply
-  impossible.""")
-elif tightening:
-    print("""
-  The sign happens to be right this time. Do not take any comfort from that:
-  the recommendation tightens the threshold, so a strict superset of records
-  falls below the line and the difference COULD NOT have been negative in
-  truth. A correct sign here is the sampling error landing the right way, not
-  evidence the estimate is sound.""")
-else:
-    print("""
-  The recommendation loosens the threshold, so fewer records fall below the
-  line and the difference should be negative.""")
-
-print(f"""
-  Either way the estimate is unusable, and this is the line that shows why:
-  the difference being measured is {abs(naive_delta):,.0f} cases, while the 95% interval
-  around ONE of the two estimates is {naive_width:,.0f} cases wide. The noise is
-  {naive_width / max(abs(naive_delta), 1):.1f}x the signal.
-
-  Never difference two sampled estimates when the effect is smaller than
-  either one's confidence interval.
+  There is a typology behind that. Cash deposited and left sitting is not
+  layering; cash deposited and then moved is. A velocity floor of zero is
+  really the condition "the money went somewhere afterwards", which is exactly
+  what the cash rule alone cannot see.
 """)
 
-# %%
-deposits = in_time[SCORE_COL]
-band = in_time[(deposits > CURRENT_THRESHOLD) & (deposits <= threshold)]
-band_cases = int(band["case"].sum())
 
-print(f"  Correct approach -- measure the band directly:\n")
-print(f"    Records between £{CURRENT_THRESHOLD:,} and £{threshold:,.0f}: {len(band):,}")
-print(f"    True cases among them:                         {band_cases:,}")
-print(f"    Precision of the alerts being given up:        "
-      f"{band_cases / len(band) if len(band) else float('nan'):.2%}")
-print(f"""
-  No sampling, no confidence interval, no estimate. These records alerted
-  under the incumbent rule, so they were investigated and they carry real
-  dispositions. The cost of tightening a threshold is directly observable
-  from historical alert outcomes.
+def challenger_flags(df: pd.DataFrame, retail_cut: float, corporate_cut: float,
+                     velocity_min: int | None) -> np.ndarray:
+    """Segment cash thresholds AND an optional velocity condition.
 
-  The distinction generalises, and it is worth holding on to:
+    ``velocity_min=None`` means no velocity condition at all. ``0`` is a real
+    condition -- "at least one outbound transaction" -- not the absence of one.
+    """
+    cash = np.where(df["segment_group"] == "Retail",
+                    df["monthly_cash_deposits"] > retail_cut,
+                    df["monthly_cash_deposits"] > corporate_cut)
+    return cash if velocity_min is None else cash & (df["velocity"] > velocity_min)
 
-    TIGHTENING a threshold -- the records you stop alerting on are above the
-    historical line. They have labels. COUNT them.
 
-    LOOSENING a threshold -- the records you start alerting on were never
-    investigated. They have no labels. SAMPLE them, and report an interval.
+def evaluate_challenger(retail_cut: float, corporate_cut: float,
+                        velocity_min: int | None, df: pd.DataFrame | None = None) -> dict:
+    """Score a challenger design on ``df`` (the full population by default)."""
+    df = population if df is None else df
+    return classification_metrics(df["case"], challenger_flags(df, retail_cut, corporate_cut, velocity_min))
 
-  Sampling where you could have counted spends review effort to obtain a
-  worse answer, and invites exactly the sign error shown above.
+
+def describe(retail_cut: float, corporate_cut: float, velocity_min: int | None) -> str:
+    base = (f"Cash > £{retail_cut:,} (all segments)" if retail_cut == corporate_cut
+            else f"Retail £{retail_cut:,} / Corporate £{corporate_cut:,}")
+    if velocity_min is None:
+        return base + " (no velocity condition)"
+    return base + f" AND velocity > {velocity_min}"
+
+
+rows = []
+for retail_cut, corporate_cut, velocity_min in [
+    (15_000, 35_000, None), (15_000, 35_000, 0), (15_000, 35_000, 2), (15_000, 35_000, 3),
+]:
+    rows.append({"option": describe(retail_cut, corporate_cut, velocity_min),
+                 **evaluate_challenger(retail_cut, corporate_cut, velocity_min)})
+
+challengers = pd.DataFrame(rows)
+challengers["alerts_per_month"] = challengers["alerts"] / 12
+show(challengers[["option", "alerts", "alerts_per_month", "precision", "recall", "fpr"]],
+     "Challenger designs")
+
+for _, row in challengers.iterrows():
+    fits = row["alerts_per_month"] <= CAPACITY
+    log.record("4. Challenger design", row["option"], row.to_dict(),
+               operational_implication=f"{row['alerts_per_month']:,.0f} alerts/month.",
+               assumptions="Velocity is populated for every customer in the production engine.",
+               outcome="carried forward" if fits else "rejected",
+               rationale=("Within capacity." if fits else "Exceeds capacity."))
+
+print("""
+  The velocity condition is an AND, so it can only remove alerts. It buys
+  precision and pays in recall, and the size of that trade is the whole design
+  decision -- a velocity floor set too high turns a monitoring rule into a
+  rule that detects only customers who were never trying to hide.
+
+  One implementation risk to carry into the recommendation: a null velocity
+  fails the AND closed. The customer is then not monitored by this rule at all,
+  silently, and the backtest above cannot see it because the synthetic field is
+  always populated.
 """)
-
-delta = band_cases
-print(f"  Incremental missed cases from this change: +{delta:,} over "
-      f"{periods_in_time} periods ({delta / periods_in_time:.1f} per month)")
-print(f"  Alert volume saved: {int(current_metrics['alerts'] - recommended['alerts']):,} "
-      f"({(current_metrics['alerts'] - recommended['alerts']) / periods_in_time:,.0f} per month)")
-print(f"  Price of the change: {(current_metrics['alerts'] - recommended['alerts']) / max(delta, 1):,.0f} "
-      f"alerts saved per case given up")
-print("\n  That ratio is the whole recommendation in one number, and it is the")
-print("  sentence the risk owner has to sign.")
 
 # %% [markdown]
-# ## Step 7 -- Challenger
+# ## 5. Stability testing across Q1-Q4
 
 # %%
-banner("STEP 7: CHALLENGER COMPARISON")
+banner("5. STABILITY TESTING")
 
-challenger_flags = (
-    apply_rule(in_time[SCORE_COL], threshold)
-    | ((in_time[SCORE_COL] > threshold * 0.5) & (in_time["high_risk_jurisdiction"] == 1))
-    | ((in_time[SCORE_COL] > threshold * 0.5) & (in_time["pep_flag"] == 1))
-)
-rules = {
-    "TM-021 incumbent": current_flags,
-    "TM-021 re-tuned": recommended_flags,
-    "TM-021 + risk overlay": np.asarray(challenger_flags),
+SPEC_RETAIL, SPEC_CORPORATE, SPEC_VELOCITY = 15_000, 35_000, 3
+
+candidates = {
+    f"Incumbent (cash > £{CURRENT_THRESHOLD:,})":
+        lambda d: np.asarray(apply_rule(d["monthly_cash_deposits"], CURRENT_THRESHOLD)),
+    f"Global £{best_global['threshold']:,.0f}":
+        lambda d: np.asarray(apply_rule(d["monthly_cash_deposits"], best_global["threshold"])),
+    describe(SPEC_RETAIL, SPEC_CORPORATE, SPEC_VELOCITY):
+        lambda d: challenger_flags(d, SPEC_RETAIL, SPEC_CORPORATE, SPEC_VELOCITY),
 }
-comparison = compare_rules(in_time, rules, champion="TM-021 incumbent")
-show(comparison[["alerts", "tp", "precision", "recall", "alerts_per_true_positive",
-                 "delta_tp", "delta_alerts"]].reset_index(), "Three options on the same sample")
 
-overlap = rule_overlap(in_time, recommended_flags, np.asarray(challenger_flags))
-show(overlap, "\nRe-tuned versus risk overlay -- where they disagree")
+rows = []
+for name, rule in candidates.items():
+    for quarter in ["Q1", "Q2", "Q3", "Q4"]:
+        part = population[population["quarter"] == quarter]
+        metrics = classification_metrics(part["case"], rule(part))
+        rows.append({"option": name, "quarter": quarter,
+                     "alerts_per_month": metrics["alerts"] / 3,
+                     "precision": metrics["precision"], "recall": metrics["recall"]})
+quarterly = pd.DataFrame(rows)
+show(quarterly.pivot(index="option", columns="quarter", values="alerts_per_month").reset_index(),
+     "Alerts per month by quarter")
+show(quarterly.pivot(index="option", columns="quarter", values="precision").reset_index(),
+     "\nPrecision by quarter")
+
+# Coefficient of variation: spread relative to level, so options of very
+# different volumes are comparable on the same scale.
+stability = quarterly.groupby("option")["alerts_per_month"].agg(
+    mean="mean", std="std").assign(volume_cv=lambda d: d["std"] / d["mean"])
+stability["q4_vs_q1"] = (
+    quarterly[quarterly["quarter"] == "Q4"].set_index("option")["alerts_per_month"]
+    / quarterly[quarterly["quarter"] == "Q1"].set_index("option")["alerts_per_month"] - 1)
+show(stability.reset_index(), "\nVolume stability across the year")
+
+worst = stability["volume_cv"].idxmax()
+print(f"\n  Least stable option: {worst}")
+print(f"    volume grows {stability.loc[worst, 'q4_vs_q1']:+.0%} from Q1 to Q4")
+
+incumbent_report = stability_report(population, CURRENT_THRESHOLD,
+                                    score_col="monthly_cash_deposits", baseline_periods=3)
+save(plot_stability_chart(incumbent_report, metric="alerts",
+                          title="TM-021 incumbent alert volume across the year"),
+     OUT / "week10_incumbent_stability.png")
+print(f"\n  Periods breaching control limits (incumbent): "
+      f"{int(incumbent_report['any_breach'].sum())} of {len(incumbent_report)}")
+print(f"  PSI on cash deposits, final period: {incumbent_report.iloc[-1]['psi']:.2f} "
+      f"({incumbent_report.iloc[-1]['band']})")
+
+print("""
+  Every option's volume grows through the year, because the population is
+  drifting rather than the rules being unstable in themselves. That matters for
+  the recommendation: whatever is chosen must be sized against the LATEST
+  quarter, not the twelve-month average, or it goes live already over capacity.
+""")
 
 # %% [markdown]
-# ## Step 8 -- Recommendation and paper
+# ## 6. Recommendation
 
 # %%
-banner("STEP 8: RECOMMENDATION")
+banner("6a. THE SPEC'S EXAMPLE CALIBRATION, EVALUATED")
 
-risk_sentence = (
-    f"Accepts {delta:,} additional missed cases ({delta / periods_in_time:.1f}/month), "
-    f"measured directly from historical dispositions."
-)
+example = evaluate_challenger(SPEC_RETAIL, SPEC_CORPORATE, SPEC_VELOCITY)
+print(f"""  Retail £{SPEC_RETAIL:,} / Corporate £{SPEC_CORPORATE:,} AND velocity > {SPEC_VELOCITY}
+
+    Alerts     {example['alerts'] / 12:,.0f} per month ({example['alerts'] / 12 / CAPACITY:.0%} of the {CAPACITY:,} allocation)
+    Precision  {example['precision']:.2%}   (from {baseline['precision']:.2%})
+    Recall     {example['recall']:.2%}   (from {baseline['recall']:.2%})
+    Volume     {1 - example['alerts'] / baseline['alerts']:.0%} reduction
+""")
+
+print(f"""  It over-corrects, and the capacity column is what shows it.
+
+  Senior management asked for volume reduction and this delivers {1 - example['alerts'] / baseline['alerts']:.0%} of it.
+  But it leaves {CAPACITY - example['alerts'] / 12:,.0f} of the {CAPACITY:,} monthly alerts unused -- {1 - example['alerts'] / 12 / CAPACITY:.0%} of the
+  investigation capacity the bank is already paying for sits idle -- while
+  recall falls {(baseline['recall'] - example['recall']) * 100:.0f} percentage points and {int(example['fn'] - baseline['fn']):,} additional cases go
+  unalerted.
+
+  That fails the third constraint. "Missed-risk tolerance limited" is not
+  satisfied by a calibration that gives up most of the detection to hit a
+  volume target it overshot. Capacity was the binding constraint; a rule using
+  {example['alerts'] / 12 / CAPACITY:.0%} of it has stopped being constrained by anything.
+""")
+
+log.record("6. Recommendation",
+           "SPEC EXAMPLE: " + describe(SPEC_RETAIL, SPEC_CORPORATE, SPEC_VELOCITY),
+           example,
+           operational_implication=f"{example['alerts'] / 12:,.0f} alerts/month -- only "
+                                   f"{example['alerts'] / 12 / CAPACITY:.0%} of the allocation, leaving "
+                                   f"{CAPACITY - example['alerts'] / 12:,.0f}/month of paid capacity idle.",
+           assumptions="Velocity populated for all customers; segment assignment stable.",
+           outcome="rejected",
+           rationale=f"Over-corrects. Delivers the volume reduction but gives up "
+                     f"{(baseline['recall'] - example['recall']) * 100:.0f}pp of recall and leaves most of the "
+                     f"investigation capacity unused. Fails the missed-risk constraint.")
+
+# %% [markdown]
+# ### 6b. Searching the design space within capacity
+#
+# The constraint is a budget, not a target to undershoot. Spend it.
+
+# %%
+banner("6b. CALIBRATIONS THAT ACTUALLY USE THE ALLOCATION")
+
+import itertools
+
+rows = []
+for retail_cut, corporate_cut, velocity_min in itertools.product(
+        [10_000, 12_500, 15_000, 20_000, 25_000], [15_000, 20_000, 25_000, 35_000],
+        [None, 0, 1, 2, 3]):
+    # Corporate must sit at or above Retail. A lower corporate cut is not
+    # defensible to an investigator or a validator, whatever it scores.
+    if corporate_cut < retail_cut:
+        continue
+    metrics = evaluate_challenger(retail_cut, corporate_cut, velocity_min)
+    q4_metrics = evaluate_challenger(retail_cut, corporate_cut, velocity_min,
+                                     population[population["quarter"] == "Q4"])
+    rows.append({
+        "retail": retail_cut, "corporate": corporate_cut, "velocity_min": velocity_min,
+        "alerts_per_month": metrics["alerts"] / 12,
+        "q4_alerts_per_month": q4_metrics["alerts"] / 3,
+        "precision": metrics["precision"], "recall": metrics["recall"],
+        "fpr": metrics["fpr"], "fn": metrics["fn"],
+    })
+
+design_space = pd.DataFrame(rows)
+
+# Size on the Q4 run-rate, not the twelve-month average. The population drifted
+# through the year, so an option averaging inside capacity across all four
+# quarters can still be over it on the day it goes live. Selecting on the annual
+# mean is the mistake section 5 warned about, and it is easy to make here.
+within = design_space[design_space["q4_alerts_per_month"] <= CAPACITY].sort_values(
+    "recall", ascending=False)
+show(within.head(8)[["retail", "corporate", "velocity_min", "alerts_per_month",
+                     "q4_alerts_per_month", "precision", "recall", "fpr"]],
+     f"Best options whose Q4 run-rate fits the {CAPACITY:,}/month allocation")
+
+over_on_q4 = design_space[(design_space["alerts_per_month"] <= CAPACITY)
+                          & (design_space["q4_alerts_per_month"] > CAPACITY)]
+print(f"\n  {len(over_on_q4)} of {len(design_space)} designs average inside capacity across the year "
+      f"but breach it in Q4.\n  Selecting on the annual mean would have shipped one of those.")
+
+best = within.iloc[0]
+BEST_RETAIL = int(best["retail"])
+BEST_CORPORATE = int(best["corporate"])
+BEST_VELOCITY = None if pd.isna(best["velocity_min"]) else int(best["velocity_min"])
+proposed = evaluate_challenger(BEST_RETAIL, BEST_CORPORATE, BEST_VELOCITY)
 
 print(f"""
-  RECOMMENDATION
+  Best within capacity: Retail £{BEST_RETAIL:,} / Corporate £{BEST_CORPORATE:,} AND velocity > {BEST_VELOCITY}
+    {proposed['alerts'] / 12:,.0f} alerts/month ({proposed['alerts'] / 12 / CAPACITY:.0%} of allocation), recall {proposed['recall']:.2%}
 
-  1. Re-tune TM-021 from £{CURRENT_THRESHOLD:,} to £{threshold:,.0f}.
-     Monthly volume {monthly_now:,.0f} -> {recommended['alerts'] / periods_in_time:,.0f}, within the {CAPACITY:,}/month capacity.
-     {risk_sentence}
-
-  2. Adopt segment-specific thresholds.
-     {int(total['uplift_tp']):+,} cases ({uplift_pct:+.1%}) at the same alert budget.
-     Conditional on segment data quality being confirmed as a monitoring control.
-
-  3. Re-tune against the most recent 12 periods, not the full 24.
-     The population is drifting; a threshold fitted to two years of history
-     is already stale on the day it is implemented.
-
-  4. Implement the Week 7 monitoring triggers, and re-tune when alert volume
-     breaches its control band for two consecutive periods rather than
-     waiting for the annual cycle.
-
-  NOT recommended at this stage: the risk overlay challenger. It improves
-  detection, but it depends on jurisdiction and PEP flags whose data quality
-  has not been assessed. A condition on a field that is null for part of the
-  population fails closed and silently under-monitors exactly the customers
-  it was added to catch (Week 6).
+  Against the spec's example: {(proposed['recall'] - example['recall']) * 100:+.1f}pp of recall recovered, for
+  {proposed['alerts'] / 12 - example['alerts'] / 12:+,.0f} alerts a month the team already has the capacity to work.
 """)
 
 # %%
-# Score the live threshold exactly rather than snapping it to the grid.
-current_row = threshold_sweep(in_time, SCORE_COL, "case",
-                             thresholds=[CURRENT_THRESHOLD]).iloc[0]
+# Does the segmentation earn its keep, or would one global cut do the same job?
+# Constrained the SAME way as the adopted option -- Q4 run-rate inside capacity.
+# Comparing against a global threshold that breaches Q4 would not be a
+# like-for-like test; it would be scoring a feasible option against an
+# infeasible one and calling the difference a benefit of segmentation.
+velocity_match = (design_space["velocity_min"].isna() if BEST_VELOCITY is None
+                  else design_space["velocity_min"] == BEST_VELOCITY)
+global_equivalent = design_space[
+    (design_space["retail"] == design_space["corporate"])
+    & velocity_match
+    & (design_space["q4_alerts_per_month"] <= CAPACITY)
+].sort_values("recall", ascending=False)
 
-paper = tuning_paper(
+if not global_equivalent.empty:
+    simplest = global_equivalent.iloc[0]
+    gap = (best["recall"] - simplest["recall"]) * 100
+    print(f"""  A one-threshold check before recommending two:
+
+    {describe(int(simplest['retail']), int(simplest['retail']), BEST_VELOCITY)}
+      {simplest['alerts_per_month']:,.0f}/month on the year, {simplest['q4_alerts_per_month']:,.0f}/month in Q4, recall {simplest['recall']:.2%}
+
+    The segmented version buys {gap:+.2f}pp of recall over it.
+""")
+    if abs(gap) < 1.0:
+        print(f"""  That is inside noise. The segmentation is not earning its keep here: it
+  adds a second threshold to document, approve, monitor and re-tune, and it
+  makes segment assignment an AML control, for under a percentage point of
+  detection. Week 5's test applies -- and on this population it fails.
+
+  The recommendation below therefore leads with the simpler rule and offers
+  the segmented variant as an option, rather than the other way round.
+""")
+        BEST_RETAIL = BEST_CORPORATE = int(simplest["retail"])
+        proposed = evaluate_challenger(BEST_RETAIL, BEST_CORPORATE, BEST_VELOCITY)
+
+# %% [markdown]
+# ### 6c. Recommendation
+
+# %%
+banner("6c. RECOMMENDATION")
+
+q4 = population[population["quarter"] == "Q4"]
+q4_metrics = evaluate_challenger(BEST_RETAIL, BEST_CORPORATE, BEST_VELOCITY, q4)
+
+if BEST_RETAIL == BEST_CORPORATE:
+    calibration = f"    All segments  cash deposits > £{BEST_RETAIL:,} in 30 days"
+else:
+    calibration = (f"    Retail        cash deposits > £{BEST_RETAIL:,} in 30 days\n"
+                   f"    Corporate     cash deposits > £{BEST_CORPORATE:,} in 30 days")
+velocity_line = ("" if BEST_VELOCITY is None
+                 else f"\n    AND           velocity > {BEST_VELOCITY} outbound transactions")
+
+print(f"""  PROPOSED CALIBRATION
+
+{calibration}{velocity_line}
+""")
+
+impact = pd.DataFrame([
+    {"Metric": "Alerts (per month)", "Before": f"{baseline['alerts'] / 12:,.0f}",
+     "After": f"{proposed['alerts'] / 12:,.0f}",
+     "Change": f"{proposed['alerts'] / baseline['alerts'] - 1:+.0%}"},
+    {"Metric": "Precision", "Before": f"{baseline['precision']:.2%}",
+     "After": f"{proposed['precision']:.2%}",
+     "Change": f"{(proposed['precision'] - baseline['precision']) * 100:+.2f}pp"},
+    {"Metric": "Recall", "Before": f"{baseline['recall']:.2%}",
+     "After": f"{proposed['recall']:.2%}",
+     "Change": f"{(proposed['recall'] - baseline['recall']) * 100:+.2f}pp"},
+    {"Metric": "FPR", "Before": f"{baseline['fpr']:.2%}",
+     "After": f"{proposed['fpr']:.2%}",
+     "Change": f"{(proposed['fpr'] - baseline['fpr']) * 100:+.2f}pp"},
+])
+show(impact, "IMPACT")
+
+print(f"""
+  Against the three constraints:
+
+    Investigation capacity fixed   {proposed['alerts'] / 12:,.0f}/month against {CAPACITY:,} allocated
+                                   ({proposed['alerts'] / 12 / CAPACITY:.0%} of capacity)
+                                   Q4 run-rate: {q4_metrics['alerts'] / 3:,.0f}/month ({q4_metrics['alerts'] / 3 / CAPACITY:.0%})
+    Volume reduction expected      {1 - proposed['alerts'] / baseline['alerts']:.0%} reduction delivered
+    Missed-risk tolerance limited  {int(proposed['fn']):,} cases not alerted, against {int(baseline['fn']):,}
+                                   under the incumbent ({int(proposed['fn'] - baseline['fn']):+,} cases)
+
+  The Q4 run-rate is the number to size against, not the twelve-month average.
+  The population drifted through the year, so a calibration sized on the annual
+  mean goes live already behind.
+""")
+
+log.record("6. Recommendation",
+           "ADOPTED: " + describe(BEST_RETAIL, BEST_CORPORATE, BEST_VELOCITY),
+           proposed,
+           operational_implication=f"{proposed['alerts'] / 12:,.0f} alerts/month "
+                                   f"({proposed['alerts'] / 12 / CAPACITY:.0%} of allocation); "
+                                   f"Q4 run-rate {q4_metrics['alerts'] / 3:,.0f}/month.",
+           assumptions="Velocity populated for all customers; SAR-based labels; "
+                       "population continues drifting at the observed rate.",
+           outcome="adopted",
+           rationale=f"Delivers the required volume reduction while spending the allocated "
+                     f"capacity rather than undershooting it. Recovers "
+                     f"{(proposed['recall'] - example['recall']) * 100:.0f}pp of recall against the "
+                     f"example calibration. Recall still falls against the incumbent; that cost "
+                     f"is quantified and put to the risk owner explicitly.")
+
+SPEC_RETAIL_USED, SPEC_CORPORATE_USED, SPEC_VELOCITY_USED = BEST_RETAIL, BEST_CORPORATE, BEST_VELOCITY
+
+# %% [markdown]
+# ### Risks
+
+# %%
+banner("RISKS")
+
+risks = pd.DataFrame([
+    ("Potential blind spots",
+     "The velocity AND removes high-value, low-frequency cash deposits -- a single "
+     "large structured deposit no longer alerts on this rule at all.",
+     "Confirm another rule covers single large cash deposits before implementation. "
+     "If none does, add an OR leg at a high cash value with no velocity condition."),
+    ("Potential blind spots",
+     "Recall falls against the incumbent even on the adopted calibration. The cases "
+     "lost are disproportionately low-velocity, so a customer making one large cash "
+     "deposit a month is less well covered than before.",
+     "Confirm another rule covers single large cash deposits. Report the lost-case "
+     "count to the risk owner as an explicit acceptance, not as a footnote."),
+    ("Data limitations",
+     "A null velocity fails the AND closed, silently un-monitoring that customer. "
+     "The backtest cannot detect this because the test field is always populated.",
+     "Measure velocity field coverage in production BEFORE implementation. Treat "
+     "null as velocity-condition-met (fail open) rather than closed."),
+    ("Data limitations",
+     "Case labels are SAR-based and therefore absent below the incumbent's line. "
+     "Measured recall is optimistic by an unquantified margin.",
+     "Below-the-line sample against the proposed rule (see extras/atl_btl_testing.py) "
+     "before the change is approved."),
+    ("Data limitations",
+     "Segment assignment becomes an AML control the moment thresholds differ by segment.",
+     "Confirm who can change a customer's segment, and add segment changes to the "
+     "monitoring pack."),
+    ("Monitoring requirements",
+     "Volume grew through the year on every option tested; the population is drifting.",
+     "Size against the latest quarter, not the annual average. Control limits from "
+     "the most recent stable quarter, re-tune on two consecutive breaches."),
+    ("Monitoring requirements",
+     "Two thresholds and a velocity condition is three parameters to govern, up from one.",
+     "Each gets a named owner, a stated rationale and a re-tuning cycle in the paper."),
+], columns=["Risk area", "Risk", "Mitigation"])
+show(risks, "Risks and mitigations")
+
+# %% [markdown]
+# ## Deliverables
+
+# %%
+banner("DELIVERABLES")
+
+sweep_for_paper = threshold_sweep(population, "monthly_cash_deposits", "case",
+                                  thresholds=SWEEP_THRESHOLDS)
+current_row = sweep_for_paper.iloc[0]
+proposed_row = pd.Series({**proposed, "threshold": BEST_RETAIL})
+
+paper = mini_tuning_paper(
     rule_name="TM-021 Cash Deposit Structuring",
-    rule_logic=f"ALERT IF cash_deposits_30d > {CURRENT_THRESHOLD:,}\n"
-               f"  proposed: cash_deposits_30d > {threshold:,.0f}\n"
-               f"  scope: all active customers | frequency: monthly, rolling 30 days",
-    population=in_time,
-    sweep=sweep,
-    proposed=recommended,
+    current_rule=f"ALERT IF cash_deposits_30d > {CURRENT_THRESHOLD:,}\n"
+                 + f"  proposed: {describe(BEST_RETAIL, BEST_CORPORATE, BEST_VELOCITY)}",
+    population=population,
+    sweep=sweep_for_paper,
+    proposed=proposed_row,
     current=current_row,
-    btl=btl,
-    segment_comparison=segment_comparison,
-    stability=incumbent_stability,
-    challenger=comparison,
-    overlap=overlap,
     author="Dan Hartwig",
-    label_basis="Confirmed SAR/STR submission within 90 days of the alert period",
+    method_notes=[
+        f"Fixed investigation capacity: {CAPACITY:,} alerts/month allocated to this rule.",
+        "Objective: maximise recall subject to that constraint, with a required volume reduction.",
+        "Stability tested independently across Q1-Q4.",
+    ],
     limitations=[
-        f"The population is drifting (PSI {incumbent_stability.iloc[-1]['psi']:.2f} in the "
-        "final period). The recommended threshold fits capacity in the tuning window but "
-        "is projected to exceed it within the holdout, so it should be treated as valid "
-        "for two quarters and re-assessed, not set annually.",
-        "Segment data quality has not been assessed. Segment-specific thresholds make "
-        "segment assignment an AML control, and that dependency must be confirmed before "
-        "recommendation 2 is implemented.",
-        "The risk-overlay challenger was not recommended because field coverage for "
-        "jurisdiction and PEP flags is unverified, not because it underperformed.",
+        "A null velocity value fails the AND condition closed, silently removing that "
+        "customer from monitoring. Field coverage must be confirmed before implementation.",
+        "Segment-specific thresholds make segment assignment an AML control.",
+        "Volume grew across all four quarters; the calibration is sized against Q4 and "
+        "should be re-assessed within two quarters rather than annually.",
     ],
 )
-path = save_paper(OUT / "week10_capstone_tuning_paper.md", paper)
+paper_path = save_paper(OUT / "week10_capstone_tuning_paper.md", paper)
+log_path = log.save(OUT / "week10_tuning_decision_log.md")
 
-banner("ARTEFACTS PRODUCED")
-for artefact in sorted(OUT.glob("week10_*")):
-    print(f"  {artefact.name}")
+print(f"  Tuning paper        {paper_path.name}")
+print(f"  Decision log        {log_path.name}  ({len(log)} options recorded)")
+print(f"  Charts              week10_alert_volume.png, week10_incumbent_stability.png")
+
+show(log.to_frame()[["step", "option", "alerts", "precision", "recall", "outcome"]],
+     "\nThe decision log -- every option tested, including those rejected")
 
 # %%
-answer("The rule now fires fewer alerts and finds fewer cases. How is that an improvement?",
+answer("Senior management asked for volume reduction. You delivered it. Why is the paper not finished?",
        """
-Because the alternative was not "the same rule, working". It was a queue
-above capacity, and alerts above capacity are not investigated -- they age.
+Because volume reduction was the request, not the objective. The objective is
+to monitor the risk within what the bank can actually investigate, and those
+two only coincide when the alerts removed were unproductive.
 
-An alert that is never worked has the same detection value as an alert never
-raised, but it carries extra cost: it consumes triage, it inflates the
-apparent coverage of the rule, and it lets the bank report monitoring it is
-not performing. The recommendation converts a rule that nominally detects
-more risk into one that actually detects what it raises.
+This recommendation removes productive alerts as well -- recall falls, and the
+paper says by how many cases. That number is the price of the request, and it
+belongs in the first paragraph rather than in an appendix, because accepting it
+is a risk-appetite decision that senior management has to take knowingly.
 
-That argument only holds while capacity really is fixed. If the true
-recommendation is "fund four more investigators", the capacity frontier from
-Week 4 is how you make that case -- and it should be put alongside this one,
-not instead of it. A tuning paper that silently accepts a resourcing
-constraint it was never asked to accept has made a risk decision on the
-bank's behalf.
+A paper that reports the volume reduction and buries the recall cost has
+answered the question it was asked and not the one it exists to answer. It will
+also be found: the recall column is the first thing independent validation
+reads.
+
+The honest close is three sentences -- here is the reduction you asked for,
+here is the detection it costs, and here is what additional capacity would buy
+instead. Then the decision is theirs, made on the evidence, and the decision
+log shows every option that was weighed to get there.
 """)
 
 banner("END OF THE PROGRAMME")
 print("""
 You can now:
   * design labelled and proxy-labelled backtests
-  * tune thresholds using evidence rather than judgement alone
+  * tune transaction-monitoring thresholds using evidence
   * quantify precision/recall trade-offs
   * build alert-volume and risk-yield curves
   * conduct segment-specific calibration
   * identify instability and model drift
   * compare incumbent versus challenger rules
   * produce validation-ready tuning papers
-  * execute a complete backtest and calibration exercise
+  * execute a complete transaction-monitoring backtest and calibration exercise
 
 Take the method, not the numbers. Every figure here came from a synthetic
 generator whose ground truth you were given. Real tuning is done against a
 label set that is sparse, late and partly wrong -- which is exactly why the
 method's discipline about stating assumptions, bounding what you cannot
 measure, and validating out of time is the part that transfers.
+
+And keep the decision log. It is the cheapest habit in the course and the one
+that will still be earning its keep three years from now.
 """)

@@ -15,6 +15,7 @@ stability    7 (PSI, KS test, drift, control charts)
 scoring      8 (weighted scores, deciles, score cut-offs)
 plots        3, 4, 5, 7, 8 (curves, control charts, decile charts)
 reporting    9, 10 (validation-ready tuning papers)
+decision_log 10 (the tuning decision log -- the recommended habit)
 ===========  =====================================================
 """
 
@@ -34,6 +35,7 @@ from .challenger import (
     atl_btl_sample, btl_test, compare_rules, required_sample_size, rule_overlap, wilson_interval,
 )
 from .reporting import markdown_table, mini_tuning_paper, save_paper, tuning_paper
+from .decision_log import DecisionEntry, TuningDecisionLog
 from .scoring import (band_score, calibrate_probability, decile_table, optimise_cutoff,
                       percentile_score, score_cutoff_sweep, weighted_score)
 from .teaching import answer, banner, show
@@ -53,6 +55,7 @@ __all__ = [
     "atl_btl_sample", "btl_test", "compare_rules", "required_sample_size",
     "rule_overlap", "wilson_interval",
     "markdown_table", "mini_tuning_paper", "save_paper", "tuning_paper",
+    "DecisionEntry", "TuningDecisionLog",
     "band_score", "calibrate_probability", "decile_table", "optimise_cutoff",
     "percentile_score", "score_cutoff_sweep", "weighted_score",
     "answer", "banner", "show",

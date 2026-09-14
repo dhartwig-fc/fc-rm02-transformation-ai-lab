@@ -52,7 +52,11 @@ jupytext --to notebook weeks/*.py
 | 7 | Stability & drift testing | KS tests, control charts, mitigants |
 | 8 | Advanced calibration using scoring | Weighted score, deciles, a justified cut-off |
 | 9 | Validation & governance | A mini tuning paper and a full one |
-| 10 | Capstone backtest & calibration | The complete engagement, end to end |
+| 10 | Capstone backtest & calibration | The complete engagement, plus a decision log |
+
+The plan also carries the recommended weekly study cadence (~4 hours), the
+stretch goals, and the Tuning Decision Log habit — which is implemented as
+`tmtuning.decision_log` rather than left as advice.
 
 ### Supplementary
 
@@ -76,6 +80,7 @@ exercises.
 | `stability` | PSI, period performance, baseline-anchored control limits |
 | `challenger` | Incumbent/challenger comparison, ATL/BTL sampling, Wilson intervals |
 | `scoring` | Weighted risk scores, deciles, probability calibration, cut-offs |
+| `decision_log` | The Tuning Decision Log — every option tested, kept as evidence |
 | `plots` | Volume, yield, trade-off, segment and control charts |
 | `reporting` | Generates a tuning paper from analysis objects |
 
@@ -96,7 +101,7 @@ print(f"£{best['threshold']:,.0f} -> {best['recall']:.1%} recall at {best['prec
 python -m pytest tests/ -q
 ```
 
-133 tests. They cover the metric arithmetic against hand-computed values, the
+143 tests. They cover the metric arithmetic against hand-computed values, the
 Wilson interval against published figures, and several regressions for bugs found
 while building this — notably that segment calibration must never underperform a
 single global threshold at the same alert budget, and that a weighted score must
