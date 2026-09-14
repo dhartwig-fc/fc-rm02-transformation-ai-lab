@@ -156,7 +156,7 @@ show(pd.DataFrame(coverage), "Coverage: what share of known risk does each thres
 print("\nThe `cases_missed` column is the one a regulator reads first.")
 print("It is also the one that is systematically understated in real data,")
 print("because cases below the line rarely got investigated and so rarely")
-print("acquired a label. Week 6 puts a confidence interval around it.")
+print("acquired a label. Week 8 puts a confidence interval around it.")
 
 # %% [markdown]
 # ## 5. Sample design and selection bias
@@ -170,7 +170,7 @@ bias = pd.DataFrame([
      "Sample the full scored population, not the alert table"),
     ("Investigated-only labels", "Treat 'no SAR' as 'not a case'",
      "Below-the-line risk is invisible, inflating measured recall",
-     "Below-the-line sampling with a confidence interval (Week 6)"),
+     "Below-the-line sampling with a confidence interval (Week 8)"),
     ("Survivorship", "Exclude customers exited during the period",
      "Removes exactly the highest-risk customers from the sample",
      "Include exited customers; flag exit reason"),

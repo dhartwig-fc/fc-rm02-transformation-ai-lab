@@ -115,20 +115,38 @@ def plot_alert_volume_curve(sweep: pd.DataFrame, capacity: int | None = None,
     One series, so no legend -- the title names it. The capacity line is drawn in
     the reserved ``warning`` status colour with a label, because it marks a
     constraint state rather than another series.
+
+    When the curve spans more than an order of magnitude above the capacity
+    line, the y-axis switches to log. On a linear axis a peak of 240,000 alerts
+    crushes a 6,300 capacity line onto the baseline, so the one thing the chart
+    exists to show -- where the curve crosses capacity -- becomes unreadable.
+    The subtitle says which scale is in use, because a log axis that is not
+    announced is its own way of misleading.
     """
     fig, ax = plt.subplots(figsize=(8, 4.6))
-    ax.plot(sweep["threshold"], sweep["alerts"], color=PALETTE[0], linewidth=_LINE_WIDTH, zorder=3)
+    alerts = sweep["alerts"].clip(lower=0)
+    ax.plot(sweep["threshold"], alerts, color=PALETTE[0], linewidth=_LINE_WIDTH, zorder=3)
+
+    log_scale = capacity is not None and capacity > 0 and alerts.max() > 10 * capacity
+    if log_scale:
+        ax.set_yscale("log")
+        ax.set_ylim(bottom=max(alerts[alerts > 0].min(), capacity / 20))
 
     if capacity is not None:
         ax.axhline(capacity, color=STATUS["warning"], linewidth=_LINE_WIDTH, linestyle="--", zorder=2)
         ax.text(sweep["threshold"].max(), capacity, f"  Capacity {capacity:,}",
-                color=INK["secondary"], fontsize=9, va="center", ha="left")
+                color=INK["secondary"], fontsize=9, va="bottom", ha="right")
 
-    _style(ax, title, "Threshold", "Alerts",
-           subtitle="Volume falls steeply at first, then flattens - past the knee, "
-                    "tightening further buys little relief")
+    subtitle = ("Volume falls steeply at first, then flattens - past the knee, "
+                "tightening further buys little relief")
+    if log_scale:
+        subtitle = ("Log scale: the curve spans two orders of magnitude, so a linear "
+                    "axis would hide the capacity crossing")
+
+    _style(ax, title, "Threshold", "Alerts" + (" (log scale)" if log_scale else ""), subtitle=subtitle)
     _gbp(ax)
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.yaxis.set_minor_formatter(mticker.NullFormatter())
     fig.tight_layout()
     return fig
 

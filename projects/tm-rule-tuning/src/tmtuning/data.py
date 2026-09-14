@@ -24,6 +24,7 @@ import pandas as pd
 
 __all__ = [
     "SEGMENTS",
+    "CUSTOMER_RISK_LEVELS",
     "SegmentProfile",
     "spec_population",
     "generate_population",
@@ -34,6 +35,11 @@ __all__ = [
 @dataclass(frozen=True)
 class SegmentProfile:
     """Behavioural profile for one customer segment.
+
+    ``velocity_lambda`` is the Poisson mean for the count of *outbound wire
+    transactions* in the period -- deliberately much smaller than ``txn_lambda``
+    (which counts all transactions), so that a challenger condition such as
+    "velocity > 5" is genuinely selective rather than true for almost everyone.
 
     ``wire_scale`` and ``cash_scale`` are gamma scale parameters in GBP; the
     shape is fixed at 2.0 so every segment keeps the same right-skewed shape and
@@ -46,6 +52,7 @@ class SegmentProfile:
     wire_scale: float
     cash_scale: float
     txn_lambda: float
+    velocity_lambda: float
     high_risk_jurisdiction_p: float
     pep_p: float
     risk_offset: float
@@ -55,19 +62,19 @@ class SegmentProfile:
 #: A single global threshold cannot serve all four -- which is the point.
 SEGMENTS: Mapping[str, SegmentProfile] = {
     "RETAIL": SegmentProfile(
-        weight=0.70, wire_scale=3_000, cash_scale=1_500, txn_lambda=18,
+        weight=0.70, wire_scale=3_000, cash_scale=1_500, txn_lambda=18, velocity_lambda=1.6,
         high_risk_jurisdiction_p=0.03, pep_p=0.002, risk_offset=-0.35,
     ),
     "SME": SegmentProfile(
-        weight=0.20, wire_scale=15_000, cash_scale=8_000, txn_lambda=45,
+        weight=0.20, wire_scale=15_000, cash_scale=8_000, txn_lambda=45, velocity_lambda=3.0,
         high_risk_jurisdiction_p=0.08, pep_p=0.010, risk_offset=0.20,
     ),
     "CORPORATE": SegmentProfile(
-        weight=0.08, wire_scale=60_000, cash_scale=5_000, txn_lambda=140,
+        weight=0.08, wire_scale=60_000, cash_scale=5_000, txn_lambda=140, velocity_lambda=4.5,
         high_risk_jurisdiction_p=0.12, pep_p=0.020, risk_offset=0.10,
     ),
     "PRIVATE": SegmentProfile(
-        weight=0.02, wire_scale=40_000, cash_scale=20_000, txn_lambda=25,
+        weight=0.02, wire_scale=40_000, cash_scale=20_000, txn_lambda=25, velocity_lambda=2.2,
         high_risk_jurisdiction_p=0.20, pep_p=0.120, risk_offset=0.80,
     ),
 }
@@ -78,10 +85,15 @@ SEGMENTS: Mapping[str, SegmentProfile] = {
 _BETA = {
     "wire": 0.90,
     "cash_ratio": 0.70,
+    "velocity": 0.55,
+    "customer_risk": 0.65,
     "high_risk_jurisdiction": 1.10,
     "pep": 0.90,
     "new_account": 0.60,
 }
+
+#: Ordinal encoding of the KYC customer risk rating, used as a model driver.
+CUSTOMER_RISK_LEVELS = {"LOW": 0.0, "MEDIUM": 1.0, "HIGH": 2.0}
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
@@ -178,8 +190,14 @@ def generate_population(
     DataFrame with columns:
         ``customer_id``, ``period``, ``period_index``, ``segment``,
         ``monthly_wire_value``, ``monthly_cash_deposits``, ``txn_count``,
-        ``cash_ratio``, ``high_risk_jurisdiction``, ``pep_flag``,
-        ``account_age_months``, ``risk_probability``, ``case``.
+        ``velocity``, ``cash_ratio``, ``customer_risk``,
+        ``high_risk_jurisdiction``, ``pep_flag``, ``account_age_months``,
+        ``risk_probability``, ``case``.
+
+    ``velocity`` is the count of outbound wire transactions in the period, and
+    ``customer_risk`` the KYC rating (LOW/MEDIUM/HIGH). Both are real risk
+    drivers in the generator, so a challenger rule built on them (Week 6) finds
+    genuine signal rather than noise.
 
     Notes
     -----
@@ -218,6 +236,7 @@ def generate_population(
     wire_scale = np.array([SEGMENTS[s].wire_scale for s in names])[segment_idx]
     cash_scale = np.array([SEGMENTS[s].cash_scale for s in names])[segment_idx]
     txn_lambda = np.array([SEGMENTS[s].txn_lambda for s in names])[segment_idx]
+    velocity_lambda = np.array([SEGMENTS[s].velocity_lambda for s in names])[segment_idx]
     hrj_p = np.array([SEGMENTS[s].high_risk_jurisdiction_p for s in names])[segment_idx]
     pep_p = np.array([SEGMENTS[s].pep_p for s in names])[segment_idx]
     risk_offset = np.array([SEGMENTS[s].risk_offset for s in names])[segment_idx]
@@ -227,9 +246,25 @@ def generate_population(
     monthly_wire_value = rng.gamma(2.0, wire_scale * inflation)
     monthly_cash_deposits = rng.gamma(2.0, cash_scale * inflation)
     txn_count = rng.poisson(txn_lambda) + 1
+    velocity = rng.poisson(velocity_lambda)
     high_risk_jurisdiction = rng.binomial(1, hrj_p)
     pep_flag = rng.binomial(1, pep_p)
     account_age_months = rng.integers(1, 180, n)
+
+    # KYC customer risk rating, as assigned at onboarding and periodic review.
+    # Driven by the same jurisdiction and PEP factors an analyst would use, plus
+    # noise -- a real rating is a judgement, so it is correlated with risk
+    # without being a clean function of it.
+    rating_latent = (
+        1.3 * high_risk_jurisdiction
+        + 1.5 * pep_flag
+        + 0.5 * (account_age_months < 12)
+        + rng.normal(0, 1.0, n)
+    )
+    cut_medium, cut_high = np.quantile(rating_latent, [0.72, 0.93])
+    customer_risk = np.where(rating_latent >= cut_high, "HIGH",
+                             np.where(rating_latent >= cut_medium, "MEDIUM", "LOW"))
+    customer_risk_ordinal = np.vectorize(CUSTOMER_RISK_LEVELS.__getitem__)(customer_risk)
 
     total_value = monthly_wire_value + monthly_cash_deposits
     cash_ratio = monthly_cash_deposits / np.maximum(total_value, 1.0)
@@ -241,6 +276,8 @@ def generate_population(
     linear = (
         _BETA["wire"] * _z(np.log1p(monthly_wire_value))
         + _BETA["cash_ratio"] * _z(cash_ratio)
+        + _BETA["velocity"] * _z(velocity.astype(float))
+        + _BETA["customer_risk"] * customer_risk_ordinal
         + _BETA["high_risk_jurisdiction"] * high_risk_jurisdiction
         + _BETA["pep"] * pep_flag
         + _BETA["new_account"] * (account_age_months < 12).astype(float)
@@ -261,7 +298,9 @@ def generate_population(
             "monthly_wire_value": monthly_wire_value.round(2),
             "monthly_cash_deposits": monthly_cash_deposits.round(2),
             "txn_count": txn_count,
+            "velocity": velocity,
             "cash_ratio": cash_ratio.round(4),
+            "customer_risk": customer_risk,
             "high_risk_jurisdiction": high_risk_jurisdiction,
             "pep_flag": pep_flag,
             "account_age_months": account_age_months,

@@ -11,8 +11,8 @@ Ten runnable weekly exercises that take you from "what is a confusion matrix"
 to a complete, validation-ready tuning paper. Every week is a script you run and
 read; there are no gaps to fill in from a slide deck.
 
-The curriculum is in **[LEARNING_PLAN.md](LEARNING_PLAN.md)**. Weeks 1-3 follow
-a supplied specification; Weeks 4-10 are derived from its stated learning
+The curriculum is in **[LEARNING_PLAN.md](LEARNING_PLAN.md)**. Weeks 1-6 follow
+a supplied specification; Weeks 7-10 are derived from its stated learning
 outcomes and are marked as such.
 
 ## Quick start
@@ -46,14 +46,17 @@ jupytext --to notebook weeks/*.py
 | --- | --- | --- |
 | 1 | Building the tuning framework | Metric vocabulary, the accuracy trap |
 | 2 | Rule backtesting fundamentals | Coverage analysis, selection-bias checklist |
-| 3 | Threshold optimisation | Constrained recommendation, out-of-time check |
-| 4 | Alert volume and risk yield curves | Three charts, a costed operating point |
-| 5 | Segment-specific calibration | Per-segment thresholds, uplift at equal budget |
-| 6 | Above and below-the-line testing | Missed-risk estimate with a confidence interval |
+| 3 | Threshold optimisation | Sensitivity analysis, a costed recommendation |
+| 4 | Alert volume & capacity modelling | Queue dynamics, a capacity-feasible threshold |
+| 5 | Segment-based calibration | Per-segment thresholds, uplift at equal budget |
+| 6 | Challenger rule development | Overlap decomposition, composite scores |
 | 7 | Stability, instability and drift | Control charts, PSI, monitoring triggers |
-| 8 | Incumbent versus challenger | Overlap decomposition, decision gates |
+| 8 | Above and below-the-line testing | Missed-risk estimate with a confidence interval |
 | 9 | Validation-ready tuning papers | A generated tuning paper |
 | 10 | Capstone: full backtest and calibration | The complete exercise, end to end |
+
+Weeks 1–6 follow the supplied specification. Weeks 7–10 are derived from its
+stated learning outcomes and are marked as such throughout.
 
 ## The toolkit
 
@@ -64,10 +67,11 @@ exercises.
 | --- | --- |
 | `metrics` | Confusion counts and the AML metric set, with honest NaN handling |
 | `data` | Synthetic populations — spec-faithful and risk-linked, with optional drift |
+| `teaching` | Presentation helpers for the weekly scripts (banners, tables) |
 | `thresholds` | Quantile sweeps, marginal yield, capacity-constrained selection |
 | `segments` | Per-segment calibration; allocates an alert budget to maximise detection |
 | `stability` | PSI, period performance, baseline-anchored control limits |
-| `challenger` | Champion/challenger comparison, ATL/BTL sampling, Wilson intervals |
+| `challenger` | Incumbent/challenger comparison, ATL/BTL sampling, Wilson intervals |
 | `plots` | Volume, yield, trade-off, segment and control charts |
 | `reporting` | Generates a tuning paper from analysis objects |
 

@@ -137,3 +137,47 @@ def test_tuning_paper_reports_deltas_in_percentage_points(paper_inputs):
     current = sweep.iloc[0]
     paper = tuning_paper("TM-014", "ALERT IF wire > t", population, sweep, proposed, current)
     assert "pp)" in paper
+
+
+# --- velocity and customer risk (Week 6 inputs) ---------------------------
+
+def test_velocity_is_selective_at_the_spec_challenger_cut():
+    """The spec's challenger uses 'velocity > 5'. If that fired on most rows the
+    AND would be decorative, so the generator keeps the wire-transaction count
+    well below the all-transaction count."""
+    df = generate_population(n=40_000, seed=606)
+    flagged = (df["velocity"] > 5).mean()
+    assert 0.01 < flagged < 0.20
+    assert df["velocity"].max() < df["txn_count"].max()
+
+
+def test_velocity_carries_risk_signal():
+    df = generate_population(n=40_000, seed=606)
+    high = df.loc[df["velocity"] > 5, "case"].mean()
+    low = df.loc[df["velocity"] <= 5, "case"].mean()
+    assert high > low * 2
+
+
+def test_customer_risk_ratings_are_ordered_by_case_rate():
+    df = generate_population(n=40_000, seed=606)
+    rates = df.groupby("customer_risk")["case"].mean()
+    assert set(rates.index) == {"LOW", "MEDIUM", "HIGH"}
+    assert rates["LOW"] < rates["MEDIUM"] < rates["HIGH"]
+
+
+def test_customer_risk_is_a_minority_at_the_top_band():
+    """A rating that marks half the book HIGH conveys nothing."""
+    df = generate_population(n=40_000, seed=606)
+    assert 0.02 < (df["customer_risk"] == "HIGH").mean() < 0.15
+
+
+def test_spec_challenger_beats_incumbent_on_precision():
+    """Week 6's scenario: amount > 30k AND velocity > 5 should be sharper than
+    amount > 50k, or the week has nothing to compare."""
+    from tmtuning.metrics import classification_metrics
+    df = generate_population(n=40_000, seed=606)
+    incumbent = classification_metrics(df["case"], df["monthly_wire_value"] > 50_000)
+    challenger = classification_metrics(
+        df["case"], (df["monthly_wire_value"] > 30_000) & (df["velocity"] > 5))
+    assert challenger["precision"] > incumbent["precision"]
+    assert challenger["alerts"] < incumbent["alerts"]

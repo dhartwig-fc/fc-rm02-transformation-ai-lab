@@ -41,7 +41,17 @@ from tmtuning.plots import (plot_alert_volume_curve, plot_precision_recall_trade
 from tmtuning.segments import segment_sweeps
 
 OUT = _ROOT / "outputs"
-CAPACITY = 350          # alerts per month the operation can actually work
+# Capacity allocated to THIS rule, not the whole team. The Week 4 team of 12
+# investigators can work 12 * 25 * 21 = 6,300 alerts a month across all 18
+# rules in the estate; TM-014's agreed share of that queue is 350. Tuning a
+# single rule against the whole team's capacity is a common and expensive
+# error -- it implicitly assumes every other rule stops firing.
+INVESTIGATORS = 12
+ALERTS_PER_DAY_EACH = 25
+WORKING_DAYS = 21
+RULES_IN_ESTATE = 18
+TEAM_CAPACITY = INVESTIGATORS * ALERTS_PER_DAY_EACH * WORKING_DAYS
+CAPACITY = 350          # TM-014's allocated share of the monthly queue
 CURRENT_THRESHOLD = 50_000
 
 # %% [markdown]
@@ -49,6 +59,12 @@ CURRENT_THRESHOLD = 50_000
 
 # %%
 banner("STEP 1: SAMPLE AND PROFILE")
+
+print(f"  Team capacity     {TEAM_CAPACITY:,} alerts/month "
+      f"({INVESTIGATORS} investigators x {ALERTS_PER_DAY_EACH}/day x {WORKING_DAYS} days)")
+print(f"  Rules in estate   {RULES_IN_ESTATE}")
+print(f"  TM-014 allocation {CAPACITY:,} alerts/month "
+      f"({CAPACITY / TEAM_CAPACITY:.1%} of the team's queue)\n")
 
 # Two years of data, with drift -- which is the complaint being investigated.
 population = generate_population(n=60_000, seed=1010, n_periods=24,
@@ -319,7 +335,7 @@ print(f"""
   detection, but it depends on jurisdiction and PEP flags whose data quality
   has not been assessed. A condition on a field that is null for part of the
   population fails closed and silently under-monitors exactly the customers
-  it was added to catch (Week 8).
+  it was added to catch (Week 6).
 """)
 
 # %%

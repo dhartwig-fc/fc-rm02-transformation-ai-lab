@@ -85,7 +85,7 @@ print("\nThe circularity to name out loud in any tuning paper:")
 print("a SAR can only be filed on a case someone looked at, and someone only")
 print("looks at what got alerted. So SAR labels are systematically missing")
 print("below the line. That biases measured recall UPWARDS -- the rule looks")
-print("better at catching risk than it is. Week 6's below-the-line testing")
+print("better at catching risk than it is. Week 8's below-the-line testing")
 print("exists specifically to put a bound on that bias.")
 
 # %% [markdown]
@@ -176,7 +176,7 @@ criminal proceeds, a regulatory finding on monitoring coverage, potential
 enforcement, and the harm that sits behind the transaction.
 It is also the risk you cannot see in production. False positives announce
 themselves in the alert queue; false negatives are silent by construction.
-That asymmetry is why tuning must actively test below the line (Week 6),
+That asymmetry is why tuning must actively test below the line (Week 8),
 rather than trusting that a quiet metric means a clean portfolio.
 """)
 

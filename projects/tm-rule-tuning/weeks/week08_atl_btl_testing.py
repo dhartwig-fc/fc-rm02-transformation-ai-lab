@@ -1,5 +1,5 @@
 # %% [markdown]
-# # Week 6 -- Above and Below-the-Line Testing
+# # Week 8 -- Above and Below-the-Line Testing
 #
 # **Concept:** Every metric so far measures risk the rule already found.
 # Below-the-line testing measures the risk it did not -- the only part of the
@@ -15,6 +15,9 @@
 #
 # **Success criteria.** State the missed-risk estimate with a confidence
 # interval, and size the sample *before* drawing it.
+#
+# *(Weeks 1-6 follow the course spec. Weeks 7-10 build out the remaining stated
+# learning outcomes -- see LEARNING_PLAN.md for which is which.)*
 
 # %%
 # --- path bootstrap ---
@@ -206,11 +209,12 @@ even this estimate is a lower bound on true missed risk. It narrows the
 uncertainty; it does not eliminate it.
 """)
 
-banner("END OF WEEK 6")
+banner("END OF WEEK 8")
 print("""
-Carry forward into Week 7:
+Carry forward into Week 9:
   * Size the sample from the precision the decision needs. Then negotiate.
   * Wilson, always. Wald's zero-width interval at zero cases is a trap.
   * Report the upper bound, not the point estimate.
   * Threshold changes need a missed-risk number, not just a volume number.
+  * This is the evidence a validator asks for first. Week 9 writes it up.
 """)

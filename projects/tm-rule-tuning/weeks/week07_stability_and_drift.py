@@ -15,6 +15,9 @@
 #
 # **Success criteria.** Detect drift in a population you were not told was
 # drifting, and say which kind it is.
+#
+# *(Weeks 1-6 follow the course spec. Weeks 7-10 build out the remaining stated
+# learning outcomes -- see LEARNING_PLAN.md for which is which.)*
 
 # %%
 # --- path bootstrap ---
@@ -215,4 +218,5 @@ Carry forward into Week 8:
   * Anchor control limits to the baseline, or they chase the drift.
   * PSI + volume + precision, read together, name the failure mode.
   * Population drift and rule decay need opposite remedies.
+  * Everything so far measures risk we can see. Week 8 measures what we miss.
 """)

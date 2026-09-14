@@ -2,35 +2,32 @@
 
 ## Provenance of this plan
 
-The supplied specification covered the learning outcomes, the environment
-assumption, and Weeks 1 to 3 (Week 3 to its Concept line). Those parts are
-transcribed here as written.
+The supplied specification covers the learning outcomes, the environment
+assumption, and **Weeks 1 to 6**. Those are transcribed here as written.
 
-Weeks 4 to 10 were **not** in the supplied material. They are derived from the
-nine stated learning outcomes, mapped to the outcomes that Weeks 1-3 do not
-already cover, and are marked *(extrapolated)* throughout. If you have the rest
-of the original specification, compare it against the mapping table below and
-tell me where it differs — the week scripts are independent of each other, so a
-week can be rewritten without touching the others.
+Weeks 7 to 10 were not in the supplied material. They are derived from the nine
+stated learning outcomes — specifically the three that Weeks 1–6 do not cover —
+and are marked *(extrapolated)*. If you have the rest of the original
+specification, compare it against the mapping below and say where it differs;
+the week scripts are independent, so any one can be rewritten without touching
+the others.
 
-| Outcome (from the spec) | Covered in |
-| --- | --- |
-| Design labelled and proxy-labelled backtests | Weeks 1, 2 |
-| Tune transaction-monitoring thresholds using evidence | Week 3 |
-| Quantify precision/recall trade-offs | Weeks 1, 4 |
-| Build alert-volume and risk-yield curves | Week 4 *(extrapolated)* |
-| Conduct segment-specific calibration | Week 5 *(extrapolated)* |
-| Identify instability and model drift | Week 7 *(extrapolated)* |
-| Compare incumbent versus challenger rules | Week 8 *(extrapolated)* |
-| Produce validation-ready tuning papers | Week 9 *(extrapolated)* |
-| Execute a complete TM backtest and calibration exercise | Week 10 *(extrapolated)* |
+| Outcome (from the spec) | Covered in | Source |
+| --- | --- | --- |
+| Design labelled and proxy-labelled backtests | Weeks 1, 2 | spec |
+| Tune transaction-monitoring thresholds using evidence | Week 3 | spec |
+| Quantify precision/recall trade-offs | Weeks 1, 3 | spec |
+| Build alert-volume and risk-yield curves | Weeks 3, 4 | spec |
+| Conduct segment-specific calibration | Week 5 | spec |
+| Compare incumbent versus challenger rules | Week 6 | spec |
+| Identify instability and model drift | Week 7 | *extrapolated* |
+| Produce validation-ready tuning papers | Week 9 | *extrapolated* |
+| Execute a complete TM backtest and calibration exercise | Week 10 | *extrapolated* |
 
-Week 6 (above/below-the-line testing) is extrapolated and maps to no single
+Week 8 (above/below-the-line testing) is extrapolated and maps to no single
 outcome. It is included because the missed-risk estimate it produces is the
 evidence a model validator asks for first, and without it Weeks 9 and 10 have
 nothing to report on risk acceptance.
-
----
 
 ## Learning Outcomes
 
@@ -181,83 +178,170 @@ fixed alert volume.
 **Concept.** Tune thresholds systematically rather than relying on expert
 judgement alone.
 
-*(The supplied specification ends here. What follows is extrapolated.)*
+**Topics**
 
-**Topics** *(extrapolated)*
+- Sensitivity analysis
+- Threshold sweeps
+- Precision-recall trade-offs
+- Cost-based optimisation
 
-- Systematic threshold sweeps versus judgement-led adjustment
-- Quantile grids and why linear grids mislead on skewed data
-- Marginal yield — pricing the alerts you are about to add
-- Constrained optimisation against operational capacity
-- Overfitting and out-of-time validation
+**Python Exercise**
 
-**Success Criteria.** Recommend a threshold, state the constraint it was chosen
-under, and show that it holds on data it was not tuned on.
+```python
+thresholds = range(10000, 120000, 5000)
+```
+
+For each threshold calculate:
+
+- Precision
+- Recall
+- Alerts generated
+
+Plot results.
+
+**Deliverable**
+
+Produce a recommendation:
+
+- Current threshold = £50k
+- Proposed threshold = ?
+
+Supported by evidence.
+
+**Success Criteria.** Document tuning rationale.
+
+> **A note on the fixed grid.** A £5k step is fine for presenting a result and
+> poor for finding one: it spends 22 candidates evenly across a range the data
+> does not occupy evenly. The week runs the exercise as set, then builds a grid
+> from the data's own quantiles and shows what changes.
 
 > Run it: `python weeks/week03_threshold_optimisation.py`
 
 ---
 
-## WEEK 4: ALERT VOLUME AND RISK YIELD CURVES *(extrapolated)*
+## WEEK 4: ALERT VOLUME & CAPACITY MODELLING
 
-**Concept.** Turn the sweep into the two curves a decision is actually made
-from, and find the point where the trade stops being worth it.
+**Concept.** The statistically best threshold may be impossible operationally.
 
 **Topics**
 
-- Alert volume curves and the "knee"
-- Volume elasticity, and why a steep threshold is a fragile one
-- Risk yield curves; the precision-recall frontier
-- Costing a threshold: investigator effort versus missed risk
-- Sensitivity of any "optimum" to its least evidenced input
+- Investigation capacity
+- Queue management
+- Alert-to-investigator ratios
+- Service-level impacts
 
-**Success Criteria.** Produce the three charts a tuning paper needs, and defend
-a recommended operating point using them.
+**Exercise**
 
-> Run it: `python weeks/week04_volume_and_yield_curves.py`
+Assume:
+
+- 12 investigators
+- 25 alerts/day each
+
+```python
+capacity = 12 * 25
+```
+
+Build alert-volume curves.
+
+**Task.** Determine the highest recall threshold without breaching capacity.
+
+**Success Criteria.** Present a recommendation balancing:
+
+- Risk
+- Cost
+- Capacity
+
+> Run it: `python weeks/week04_capacity_modelling.py`
 
 ---
 
-## WEEK 5: SEGMENT-SPECIFIC CALIBRATION *(extrapolated)*
+## WEEK 5: SEGMENT-BASED CALIBRATION
 
-**Concept.** One threshold across a heterogeneous portfolio is a compromise that
-serves no segment well. Quantify the cost and allocate a fixed alert budget
-where it detects the most.
+**Concept.** One threshold rarely fits all customer types.
 
 **Topics**
 
-- Segment profiling — when segmentation is and is not justified
-- Per-segment yield curves on per-segment grids
-- Allocating a fixed alert budget across segments
-- The governance cost of more thresholds
+- Retail versus Corporate
+- Geography segmentation
+- Product segmentation
+- Peer groups
 
-**Success Criteria.** Show the detection uplift from segment calibration at an
-unchanged total alert volume — or show that there isn't one.
+**Synthetic Dataset**
+
+```python
+df["segment"] = np.where(
+    np.random.rand(len(df)) > 0.7,
+    "Corporate",
+    "Retail"
+)
+```
+
+**Exercise**
+
+Compare:
+
+- Single threshold
+- Segment-specific thresholds
+
+Example:
+
+- Retail = £20k
+- Corporate = £100k
+
+**Success Criteria.** Explain improvement achieved without creating unjustified
+complexity.
+
+> **A note on this exercise.** `np.random.rand() > 0.7` assigns the segment at
+> random, with no reference to any customer attribute, so the two segments have
+> near-identical base rates and median amounts. A segmentation uncorrelated with
+> behaviour cannot improve detection however its thresholds are set — and at
+> matched alert volume a single threshold beats it. The week demonstrates that,
+> then repeats the exercise on segments that mean something.
 
 > Run it: `python weeks/week05_segment_calibration.py`
 
 ---
 
-## WEEK 6: ABOVE AND BELOW-THE-LINE TESTING *(extrapolated)*
+## WEEK 6: CHALLENGER RULE DEVELOPMENT
 
-**Concept.** Every metric so far measures risk the rule already found.
-Below-the-line testing measures the risk it did not.
+**Concept.** Develop alternative logic to challenge current production settings.
 
 **Topics**
 
-- Above-the-line (ATL) and below-the-line (BTL) testing
-- Sample size planning
-- Wilson confidence intervals, and why not the textbook (Wald) interval
-- Extrapolating a sample rate to the full below-the-line population
+- Incumbent versus challenger
+- Risk indicators
+- Composite scores
+- Explainability
 
-**Success Criteria.** State the missed-risk estimate with a confidence
-interval, and size the sample before drawing it.
+**Scenario**
 
-> Run it: `python weeks/week06_atl_btl_testing.py`
+Current rule:
+
+> Transaction amount > £50k
+
+Challenger:
+
+> Amount > £30k
+> **AND**
+> Velocity > 5 transactions
+
+**Python Exercise**
+
+Generate:
+
+- `velocity`
+- `amount`
+- `customer_risk`
+
+Compare both rules.
+
+> Run it: `python weeks/week06_challenger_rules.py`
 
 ---
 
 ## WEEK 7: STABILITY, INSTABILITY AND MODEL DRIFT *(extrapolated)*
+
+*(The supplied specification ends after Week 6. Weeks 7-10 are extrapolated.)*
 
 **Concept.** A threshold is tuned against one snapshot of behaviour. Behaviour
 then moves.
@@ -277,24 +361,22 @@ drifting, and say which kind it is.
 
 ---
 
-## WEEK 8: INCUMBENT VERSUS CHALLENGER RULES *(extrapolated)*
+## WEEK 8: ABOVE AND BELOW-THE-LINE TESTING *(extrapolated)*
 
-**Concept.** Comparing a proposed rule to the one in production is not a metrics
-table. Netted metrics conceal reallocation, and reallocation is where the risk
-decision lives.
+**Concept.** Every metric so far measures risk the rule already found.
+Below-the-line testing measures the risk it did not.
 
 **Topics**
 
-- Like-for-like comparison design
-- Alert overlap — what the challenger uniquely finds and uniquely misses
-- Composite and multi-condition challengers
-- Out-of-time confirmation
-- Field availability as a hard gate
+- Above-the-line (ATL) and below-the-line (BTL) testing
+- Sample size planning
+- Wilson confidence intervals, and why not the textbook (Wald) interval
+- Extrapolating a sample rate to the full below-the-line population
 
-**Success Criteria.** Recommend for or against a challenger, and be able to say
-exactly what risk the change accepts.
+**Success Criteria.** State the missed-risk estimate with a confidence
+interval, and size the sample before drawing it.
 
-> Run it: `python weeks/week08_champion_challenger.py`
+> Run it: `python weeks/week08_atl_btl_testing.py`
 
 ---
 
