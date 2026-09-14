@@ -16,7 +16,7 @@ from typing import Mapping, Sequence
 import numpy as np
 import pandas as pd
 
-__all__ = ["markdown_table", "tuning_paper", "save_paper"]
+__all__ = ["markdown_table", "tuning_paper", "mini_tuning_paper", "save_paper"]
 
 
 def _fmt(value, spec: str | None = None) -> str:
@@ -281,3 +281,97 @@ def save_paper(path: str | Path, content: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def mini_tuning_paper(
+    rule_name: str,
+    current_rule: str,
+    population: pd.DataFrame,
+    sweep: pd.DataFrame,
+    proposed: pd.Series,
+    current: pd.Series,
+    method_notes: Sequence[str] | None = None,
+    limitations: Sequence[str] | None = None,
+    author: str = "",
+    paper_date: date | None = None,
+    label_basis: str = "Confirmed SAR/STR submission within 90 days of the alert period",
+) -> str:
+    """The five-section mini tuning paper: Background, Method, Results,
+    Recommendation, Limitations.
+
+    A deliberately short form. The full :func:`tuning_paper` carries every piece
+    of supporting evidence and runs to several pages; this is the version that
+    fits on two and gets read by the people who decide. Both are generated from
+    the same analysis objects, so they cannot disagree with each other.
+
+    The section order is not cosmetic. Limitations come last but are written
+    first in practice: an author who cannot fill that section has not finished
+    the analysis, whatever the Results section says.
+    """
+    paper_date = paper_date or date.today()
+    parts: list[str] = []
+
+    parts.append(f"# Mini Tuning Paper: {rule_name}\n")
+    parts.append(f"**Date:** {paper_date.isoformat()}  ")
+    parts.append(f"**Author:** {author or '_to be completed_'}  ")
+    parts.append("**Status:** Draft for independent challenge\n")
+
+    parts.append("## Background\n")
+    parts.append(f"Current rule:\n\n```\n{current_rule}\n```\n")
+    parts.append(
+        f"The rule currently generates {int(current['alerts']):,} alerts over the sample "
+        f"period at {current['precision']:.2%} precision and {current['recall']:.2%} recall, "
+        f"requiring {current['alerts_per_true_positive']:.1f} alerts of investigator effort "
+        f"per true case identified.\n"
+    )
+
+    parts.append("## Method\n")
+    prevalence = float(population["case"].mean()) if "case" in population else float("nan")
+    parts.append(
+        f"Retrospective backtest over {len(population):,} scored records containing "
+        f"{int(population['case'].sum()):,} true cases ({prevalence:.2%} base rate).\n\n"
+        f"- Label basis: {label_basis}\n"
+    )
+    if "period" in population:
+        periods = sorted(population["period"].unique())
+        parts.append(f"- Period covered: {periods[0]} to {periods[-1]} ({len(periods)} periods)\n")
+    parts.append(
+        f"- Candidate thresholds: {len(sweep)} values from £{sweep['threshold'].min():,.0f} "
+        f"to £{sweep['threshold'].max():,.0f}\n"
+        "- The rule was re-executed at each candidate and scored against the label set.\n"
+    )
+    for note in (method_notes or []):
+        parts.append(f"- {note}\n")
+
+    parts.append("\n## Results\n")
+    show = sweep.copy()
+    if len(show) > 12:
+        show = show.iloc[:: max(len(show) // 10, 1)]
+    parts.append(markdown_table(
+        show,
+        columns=["threshold", "alerts", "tp", "fn", "precision", "recall"],
+        formats={"threshold": ",.0f", "alerts": ",", "tp": ",", "fn": ",",
+                 "precision": ".2%", "recall": ".2%"},
+        headers={"threshold": "Threshold (£)", "alerts": "Alerts", "tp": "True cases found",
+                 "fn": "Missed", "precision": "Precision", "recall": "Recall"},
+    ) + "\n")
+
+    parts.append("\n## Recommendation\n")
+    parts.append(_recommendation_block(current, proposed) + "\n")
+
+    parts.append("\n## Limitations\n")
+    standing = [
+        "Labels are a proxy for true financial crime. A record with no SAR/STR is "
+        "not proven clean -- it may be undetected risk. Measured recall is therefore "
+        "optimistic, and every figure above is conditional on the label set.",
+        "SAR labels are systematically absent below the line, because a SAR can only "
+        "be filed on a case someone investigated, and someone only investigates what "
+        "alerted. The bias has a known direction: it overstates the rule's coverage.",
+        "Backtesting assumes historical behaviour is representative of the forward "
+        "period. Any known upcoming change in product, customer mix or typology "
+        "invalidates that assumption and should be raised before implementation.",
+    ]
+    for item in [*standing, *(limitations or [])]:
+        parts.append(f"- {item}\n")
+
+    return "\n".join(parts)

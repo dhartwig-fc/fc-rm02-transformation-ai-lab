@@ -1,7 +1,15 @@
 # %% [markdown]
-# # Week 8 -- Above and Below-the-Line Testing
+# # Extra -- Above and Below-the-Line Testing
 #
-# **Concept:** Every metric so far measures risk the rule already found.
+# **Not part of the 10-week specification.** This is supplementary material.
+#
+# ATL/BTL testing is standard evidence in a real threshold change: below-the-line
+# sampling is normally what a model validator asks for first, and it is what
+# turns Week 9's "Limitations -- bias and assumptions" section from an assertion
+# into a measured bound. The spec's ten weeks do not include it, so it lives
+# here rather than displacing anything.
+#
+# **Concept:** Every metric in the course measures risk a rule already found.
 # Below-the-line testing measures the risk it did not -- the only part of the
 # picture production data cannot give you.
 #
@@ -16,8 +24,7 @@
 # **Success criteria.** State the missed-risk estimate with a confidence
 # interval, and size the sample *before* drawing it.
 #
-# *(Weeks 1-6 follow the course spec. Weeks 7-10 build out the remaining stated
-# learning outcomes -- see LEARNING_PLAN.md for which is which.)*
+# Run it after Week 6: `python extras/atl_btl_testing.py`
 
 # %%
 # --- path bootstrap ---
@@ -209,12 +216,12 @@ even this estimate is a lower bound on true missed risk. It narrows the
 uncertainty; it does not eliminate it.
 """)
 
-banner("END OF WEEK 8")
+banner("END OF THIS EXTRA")
 print("""
-Carry forward into Week 9:
+What to take from it:
   * Size the sample from the precision the decision needs. Then negotiate.
   * Wilson, always. Wald's zero-width interval at zero cases is a trap.
   * Report the upper bound, not the point estimate.
   * Threshold changes need a missed-risk number, not just a volume number.
-  * This is the evidence a validator asks for first. Week 9 writes it up.
+  * This belongs in the Limitations section of the Week 9 tuning paper.
 """)

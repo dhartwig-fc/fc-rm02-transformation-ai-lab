@@ -52,7 +52,8 @@ WORKING_DAYS = 21
 RULES_IN_ESTATE = 18
 TEAM_CAPACITY = INVESTIGATORS * ALERTS_PER_DAY_EACH * WORKING_DAYS
 CAPACITY = 350          # TM-014's allocated share of the monthly queue
-CURRENT_THRESHOLD = 50_000
+CURRENT_THRESHOLD = 10_000   # cash deposits > £10k in 30 days
+SCORE_COL = "monthly_cash_deposits"
 
 # %% [markdown]
 # ## Step 1 -- Build the sample and profile it
@@ -63,7 +64,7 @@ banner("STEP 1: SAMPLE AND PROFILE")
 print(f"  Team capacity     {TEAM_CAPACITY:,} alerts/month "
       f"({INVESTIGATORS} investigators x {ALERTS_PER_DAY_EACH}/day x {WORKING_DAYS} days)")
 print(f"  Rules in estate   {RULES_IN_ESTATE}")
-print(f"  TM-014 allocation {CAPACITY:,} alerts/month "
+print(f"  TM-021 allocation {CAPACITY:,} alerts/month "
       f"({CAPACITY / TEAM_CAPACITY:.1%} of the team's queue)\n")
 
 # Two years of data, with drift -- which is the complaint being investigated.
@@ -76,7 +77,7 @@ print(f"  True cases      {population['case'].sum():,} ({population['case'].mean
 print(f"  Tuning window   {in_time['period'].min()} to {in_time['period'].max()} ({len(in_time):,} rows)")
 print(f"  Holdout         {out_of_time['period'].min()} to {out_of_time['period'].max()} ({len(out_of_time):,} rows)")
 
-show(segment_summary(population).reset_index(), "\nSegment profile")
+show(segment_summary(population, value_col=SCORE_COL).reset_index(), "\nSegment profile")
 
 # %% [markdown]
 # ## Step 2 -- Backtest the incumbent
@@ -84,10 +85,10 @@ show(segment_summary(population).reset_index(), "\nSegment profile")
 # %%
 banner("STEP 2: INCUMBENT PERFORMANCE")
 
-current_flags = apply_rule(in_time["monthly_wire_value"], CURRENT_THRESHOLD)
+current_flags = apply_rule(in_time[SCORE_COL], CURRENT_THRESHOLD)
 current_metrics = classification_metrics(in_time["case"], current_flags)
 
-print(f"  Rule TM-014 at £{CURRENT_THRESHOLD:,} over the tuning window:\n")
+print(f"  Rule TM-021 at £{CURRENT_THRESHOLD:,} over the tuning window:\n")
 monthly_now = current_metrics["alerts"] / in_time["period"].nunique()
 print(f"    Alerts              {current_metrics['alerts']:,} over {in_time['period'].nunique()} periods")
 print(f"    Monthly average     {monthly_now:,.0f}  (capacity {CAPACITY:,})")
@@ -96,7 +97,7 @@ print(f"    Precision           {current_metrics['precision']:.2%}")
 print(f"    Recall              {current_metrics['recall']:.2%}")
 print(f"    Effort per case     {current_metrics['alerts_per_true_positive']:.1f} alerts")
 
-incumbent_stability = stability_report(population, CURRENT_THRESHOLD, baseline_periods=6)
+incumbent_stability = stability_report(population, CURRENT_THRESHOLD, score_col=SCORE_COL, baseline_periods=6)
 save(plot_stability_chart(incumbent_stability, metric="alerts",
                           title="TM-014 alert volume -- incumbent threshold"),
      OUT / "week10_incumbent_stability.png")
@@ -124,7 +125,7 @@ print("""
 # %%
 banner("STEP 3: THRESHOLD SELECTION")
 
-sweep = threshold_sweep(in_time, "monthly_wire_value", "case", n_thresholds=50)
+sweep = threshold_sweep(in_time, SCORE_COL, "case", n_thresholds=50)
 periods_in_time = in_time["period"].nunique()
 budget = CAPACITY * periods_in_time  # capacity is monthly; the sweep spans the window
 
@@ -158,9 +159,9 @@ banner("STEP 4: OUT-OF-TIME VALIDATION")
 threshold = float(recommended["threshold"])
 oot = pd.DataFrame([
     {"sample": "In-time",
-     **classification_metrics(in_time["case"], apply_rule(in_time["monthly_wire_value"], threshold))},
+     **classification_metrics(in_time["case"], apply_rule(in_time[SCORE_COL], threshold))},
     {"sample": "Out-of-time",
-     **classification_metrics(out_of_time["case"], apply_rule(out_of_time["monthly_wire_value"], threshold))},
+     **classification_metrics(out_of_time["case"], apply_rule(out_of_time[SCORE_COL], threshold))},
 ])
 show(oot[["sample", "alerts", "tp", "precision", "recall", "alert_rate", "alerts_per_true_positive"]],
      f"Threshold £{threshold:,.0f} on both samples (compare RATES, not counts)")
@@ -181,7 +182,7 @@ if oot_rate > CAPACITY:
 # %%
 banner("STEP 5: SEGMENT CALIBRATION")
 
-segment_comparison = compare_uniform_vs_segmented(in_time, capacity=budget)
+segment_comparison = compare_uniform_vs_segmented(in_time, capacity=budget, score_col=SCORE_COL)
 show(segment_comparison[["segment", "threshold_uniform", "alerts_uniform", "tp_uniform",
                          "threshold_segmented", "alerts_segmented", "tp_segmented", "uplift_tp"]],
      f"Same {budget:,} alert budget, allocated two ways")
@@ -191,7 +192,7 @@ uplift_pct = total["uplift_tp"] / max(total["tp_uniform"], 1)
 print(f"\n  Detection uplift from segmentation: {int(total['uplift_tp']):+,} cases "
       f"({uplift_pct:+.1%}) at the same alert volume")
 
-save(plot_segment_curves(segment_sweeps(in_time)), OUT / "week10_segment_curves.png")
+save(plot_segment_curves(segment_sweeps(in_time, score_col=SCORE_COL)), OUT / "week10_segment_curves.png")
 
 # %% [markdown]
 # ## Step 6 -- Below-the-line testing
@@ -202,7 +203,7 @@ banner("STEP 6: BELOW-THE-LINE TESTING")
 planned_n = required_sample_size(expected_rate=0.02, margin_of_error=0.01, confidence=0.95)
 print(f"  Sample size planned for +/-1pp at 95% on an expected 2% rate: {planned_n:,} records")
 
-recommended_flags = apply_rule(in_time["monthly_wire_value"], threshold)
+recommended_flags = apply_rule(in_time[SCORE_COL], threshold)
 btl = btl_test(in_time, recommended_flags, n_below=planned_n, seed=1010)
 
 print(f"\n  Below-the-line population   {btl['below_the_line_population']:,}")
@@ -225,24 +226,47 @@ banner("STEP 6b: INCREMENTAL RISK OF THE CHANGE")
 
 naive_current = btl_test(in_time, current_flags, n_below=planned_n, seed=1010)
 naive_delta = btl["estimated_missed_cases_upper"] - naive_current["estimated_missed_cases_upper"]
-print(f"  Naive approach -- two separate BTL samples:")
+# Width of each sampled estimate, to compare against the effect being measured.
+naive_width = (btl["rate_upper"] - btl["rate_lower"]) * btl["below_the_line_population"]
+tightening = threshold > CURRENT_THRESHOLD
+
+print("  Naive approach -- two separate BTL samples:")
 print(f"    incumbent upper bound   {naive_current['estimated_missed_cases_upper']:,.0f}")
 print(f"    recommended upper bound {btl['estimated_missed_cases_upper']:,.0f}")
 print(f"    apparent difference     {naive_delta:+,.0f}")
-print("""
+print(f"    width of ONE estimate's own 95% interval: {naive_width:,.0f} cases")
+
+if tightening and naive_delta < 0:
+    print("""
   That difference has the wrong SIGN. The recommendation tightens the
   threshold, so it must miss at least as much as the incumbent -- a strict
-  superset of records falls below the line. A negative number here is
-  impossible, and it appears because two independent samples of ~750 records
-  each carry a sampling error larger than the difference being measured.
+  superset of records falls below the line. A negative number here is simply
+  impossible.""")
+elif tightening:
+    print("""
+  The sign happens to be right this time. Do not take any comfort from that:
+  the recommendation tightens the threshold, so a strict superset of records
+  falls below the line and the difference COULD NOT have been negative in
+  truth. A correct sign here is the sampling error landing the right way, not
+  evidence the estimate is sound.""")
+else:
+    print("""
+  The recommendation loosens the threshold, so fewer records fall below the
+  line and the difference should be negative.""")
+
+print(f"""
+  Either way the estimate is unusable, and this is the line that shows why:
+  the difference being measured is {abs(naive_delta):,.0f} cases, while the 95% interval
+  around ONE of the two estimates is {naive_width:,.0f} cases wide. The noise is
+  {naive_width / max(abs(naive_delta), 1):.1f}x the signal.
 
   Never difference two sampled estimates when the effect is smaller than
   either one's confidence interval.
 """)
 
 # %%
-wires = in_time["monthly_wire_value"]
-band = in_time[(wires > CURRENT_THRESHOLD) & (wires <= threshold)]
+deposits = in_time[SCORE_COL]
+band = in_time[(deposits > CURRENT_THRESHOLD) & (deposits <= threshold)]
 band_cases = int(band["case"].sum())
 
 print(f"  Correct approach -- measure the band directly:\n")
@@ -285,16 +309,16 @@ print("  sentence the risk owner has to sign.")
 banner("STEP 7: CHALLENGER COMPARISON")
 
 challenger_flags = (
-    apply_rule(in_time["monthly_wire_value"], threshold)
-    | ((in_time["monthly_wire_value"] > threshold * 0.5) & (in_time["high_risk_jurisdiction"] == 1))
-    | ((in_time["monthly_wire_value"] > threshold * 0.5) & (in_time["pep_flag"] == 1))
+    apply_rule(in_time[SCORE_COL], threshold)
+    | ((in_time[SCORE_COL] > threshold * 0.5) & (in_time["high_risk_jurisdiction"] == 1))
+    | ((in_time[SCORE_COL] > threshold * 0.5) & (in_time["pep_flag"] == 1))
 )
 rules = {
-    "TM-014 incumbent": current_flags,
-    "TM-014 re-tuned": recommended_flags,
-    "TM-014 + risk overlay": np.asarray(challenger_flags),
+    "TM-021 incumbent": current_flags,
+    "TM-021 re-tuned": recommended_flags,
+    "TM-021 + risk overlay": np.asarray(challenger_flags),
 }
-comparison = compare_rules(in_time, rules, champion="TM-014 incumbent")
+comparison = compare_rules(in_time, rules, champion="TM-021 incumbent")
 show(comparison[["alerts", "tp", "precision", "recall", "alerts_per_true_positive",
                  "delta_tp", "delta_alerts"]].reset_index(), "Three options on the same sample")
 
@@ -315,7 +339,7 @@ risk_sentence = (
 print(f"""
   RECOMMENDATION
 
-  1. Re-tune TM-014 from £{CURRENT_THRESHOLD:,} to £{threshold:,.0f}.
+  1. Re-tune TM-021 from £{CURRENT_THRESHOLD:,} to £{threshold:,.0f}.
      Monthly volume {monthly_now:,.0f} -> {recommended['alerts'] / periods_in_time:,.0f}, within the {CAPACITY:,}/month capacity.
      {risk_sentence}
 
@@ -340,14 +364,14 @@ print(f"""
 
 # %%
 # Score the live threshold exactly rather than snapping it to the grid.
-current_row = threshold_sweep(in_time, "monthly_wire_value", "case",
+current_row = threshold_sweep(in_time, SCORE_COL, "case",
                              thresholds=[CURRENT_THRESHOLD]).iloc[0]
 
 paper = tuning_paper(
-    rule_name="TM-014 High Value Outbound Wires",
-    rule_logic=f"ALERT IF monthly_outbound_wire_value > {CURRENT_THRESHOLD:,}\n"
-               f"  proposed: monthly_outbound_wire_value > {threshold:,.0f}\n"
-               f"  scope: all active customers | frequency: monthly",
+    rule_name="TM-021 Cash Deposit Structuring",
+    rule_logic=f"ALERT IF cash_deposits_30d > {CURRENT_THRESHOLD:,}\n"
+               f"  proposed: cash_deposits_30d > {threshold:,.0f}\n"
+               f"  scope: all active customers | frequency: monthly, rolling 30 days",
     population=in_time,
     sweep=sweep,
     proposed=recommended,

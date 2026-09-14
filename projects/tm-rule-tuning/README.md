@@ -11,9 +11,8 @@ Ten runnable weekly exercises that take you from "what is a confusion matrix"
 to a complete, validation-ready tuning paper. Every week is a script you run and
 read; there are no gaps to fill in from a slide deck.
 
-The curriculum is in **[LEARNING_PLAN.md](LEARNING_PLAN.md)**. Weeks 1-6 follow
-a supplied specification; Weeks 7-10 are derived from its stated learning
-outcomes and are marked as such.
+The curriculum is in **[LEARNING_PLAN.md](LEARNING_PLAN.md)**, transcribed from
+a supplied specification.
 
 ## Quick start
 
@@ -46,17 +45,21 @@ jupytext --to notebook weeks/*.py
 | --- | --- | --- |
 | 1 | Building the tuning framework | Metric vocabulary, the accuracy trap |
 | 2 | Rule backtesting fundamentals | Coverage analysis, selection-bias checklist |
-| 3 | Threshold optimisation | Sensitivity analysis, a costed recommendation |
+| 3 | Threshold optimisation | Sensitivity analysis, a justified recommendation |
 | 4 | Alert volume & capacity modelling | Queue dynamics, a capacity-feasible threshold |
 | 5 | Segment-based calibration | Per-segment thresholds, uplift at equal budget |
-| 6 | Challenger rule development | Overlap decomposition, composite scores |
-| 7 | Stability, instability and drift | Control charts, PSI, monitoring triggers |
-| 8 | Above and below-the-line testing | Missed-risk estimate with a confidence interval |
-| 9 | Validation-ready tuning papers | A generated tuning paper |
-| 10 | Capstone: full backtest and calibration | The complete exercise, end to end |
+| 6 | Challenger rule development | Overlap decomposition, a validation verdict |
+| 7 | Stability & drift testing | KS tests, control charts, mitigants |
+| 8 | Advanced calibration using scoring | Weighted score, deciles, a justified cut-off |
+| 9 | Validation & governance | A mini tuning paper and a full one |
+| 10 | Capstone backtest & calibration | The complete engagement, end to end |
 
-Weeks 1–6 follow the supplied specification. Weeks 7–10 are derived from its
-stated learning outcomes and are marked as such throughout.
+### Supplementary
+
+`extras/atl_btl_testing.py` — above and below-the-line testing. Not part of the
+specification, but below-the-line sampling is normally the first evidence a
+validator asks for, and it turns Week 9's limitations section from an assertion
+into a measured bound. Run it after Week 6.
 
 ## The toolkit
 
@@ -72,6 +75,7 @@ exercises.
 | `segments` | Per-segment calibration; allocates an alert budget to maximise detection |
 | `stability` | PSI, period performance, baseline-anchored control limits |
 | `challenger` | Incumbent/challenger comparison, ATL/BTL sampling, Wilson intervals |
+| `scoring` | Weighted risk scores, deciles, probability calibration, cut-offs |
 | `plots` | Volume, yield, trade-off, segment and control charts |
 | `reporting` | Generates a tuning paper from analysis objects |
 
@@ -92,10 +96,11 @@ print(f"£{best['threshold']:,.0f} -> {best['recall']:.1%} recall at {best['prec
 python -m pytest tests/ -q
 ```
 
-106 tests. They cover the metric arithmetic against hand-computed values, the
-Wilson interval against published figures, and several regressions for bugs
-found while building this — notably that segment calibration must never
-underperform a single global threshold at the same alert budget.
+133 tests. They cover the metric arithmetic against hand-computed values, the
+Wilson interval against published figures, and several regressions for bugs found
+while building this — notably that segment calibration must never underperform a
+single global threshold at the same alert budget, and that a weighted score must
+beat a single threshold at matched alert volume.
 
 ## A word on the numbers
 

@@ -9,7 +9,7 @@
   shape of the argument, not any real portfolio.
 -->
 
-# Tuning Paper: TM-014 High Value Outbound Wires
+# Tuning Paper: TM-021 Cash Deposit Structuring
 
 **Date:** 2026-09-14  
 **Author:** Dan Hartwig  
@@ -17,26 +17,26 @@
 
 ## 1. Recommendation
 
-Move the threshold from **£50,000** to **£58,780**.
+Move the threshold from **£10,000** to **£18,503**.
 
-- Alert volume: 7,219 -> 6,271 (-948, a 13.1% reduction)
-- True cases detected: 583 -> 526 (-57)
-- Precision: 8.08% -> 8.39% (+0.31pp)
-- Recall: 47.83% -> 43.15% (-4.68pp)
-- Investigator effort per true case: 12.4 -> 11.9 alerts
+- Alert volume: 11,537 -> 6,271 (-5,266, a 45.6% reduction)
+- True cases detected: 857 -> 593 (-264)
+- Precision: 7.43% -> 9.46% (+2.03pp)
+- Recall: 68.40% -> 47.33% (-21.07pp)
+- Investigator effort per true case: 13.5 -> 10.6 alerts
 
 ## 2. Rule under review
 
 ```
-ALERT IF monthly_outbound_wire_value > 50,000
-  proposed: monthly_outbound_wire_value > 58,780
-  scope: all active customers | frequency: monthly
+ALERT IF cash_deposits_30d > 10,000
+  proposed: cash_deposits_30d > 18,503
+  scope: all active customers | frequency: monthly, rolling 30 days
 ```
 
 ## 3. Data and sample
 
 - Observations: 44,984 scored records
-- True cases in sample: 1,219 (2.71% base rate)
+- True cases in sample: 1,253 (2.79% base rate)
 - Label basis: Confirmed SAR/STR submission within 90 days of the alert period
 
 - Period covered: 2024-01 to 2025-06 (18 periods)
@@ -49,31 +49,31 @@ Retrospective backtest over the sample above. The rule was re-executed at each c
 
 | Threshold (£) | Alerts | True cases found | Missed | Precision | Recall | Alerts per case |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1,628 | 42,734 | 1,207 | 12 | 2.82% | 99.02% | 35.4 |
-| 2,589 | 40,173 | 1,198 | 21 | 2.98% | 98.28% | 33.5 |
-| 3,485 | 37,612 | 1,172 | 47 | 3.12% | 96.14% | 32.1 |
-| 4,330 | 35,050 | 1,150 | 69 | 3.28% | 94.34% | 30.5 |
-| 5,199 | 32,489 | 1,131 | 88 | 3.48% | 92.78% | 28.7 |
-| 6,114 | 29,928 | 1,114 | 105 | 3.72% | 91.39% | 26.9 |
-| 7,140 | 27,366 | 1,094 | 125 | 4.00% | 89.75% | 25.0 |
-| 8,297 | 24,805 | 1,074 | 145 | 4.33% | 88.11% | 23.1 |
-| 9,662 | 22,244 | 1,051 | 168 | 4.72% | 86.22% | 21.2 |
-| 11,461 | 19,611 | 1,016 | 203 | 5.18% | 83.35% | 19.3 |
-| 13,909 | 16,943 | 974 | 245 | 5.75% | 79.90% | 17.4 |
-| 18,045 | 14,275 | 924 | 295 | 6.47% | 75.80% | 15.4 |
-| 25,308 | 11,607 | 829 | 390 | 7.14% | 68.01% | 14.0 |
-| 37,536 | 8,939 | 687 | 532 | 7.69% | 56.36% | 13.0 |
-| 58,780 | 6,271 | 526 | 693 | 8.39% | 43.15% | 11.9 |
-| 98,939 | 3,603 | 340 | 879 | 9.44% | 27.89% | 10.6 |
-| 231,236 | 935 | 89 | 1,130 | 9.52% | 7.30% | 10.5 |
+| 791 | 42,734 | 1,245 | 8 | 2.91% | 99.36% | 34.3 |
+| 1,274 | 40,173 | 1,237 | 16 | 3.08% | 98.72% | 32.5 |
+| 1,709 | 37,612 | 1,221 | 32 | 3.25% | 97.45% | 30.8 |
+| 2,115 | 35,050 | 1,210 | 43 | 3.45% | 96.57% | 29.0 |
+| 2,536 | 32,489 | 1,193 | 60 | 3.67% | 95.21% | 27.2 |
+| 2,991 | 29,928 | 1,168 | 85 | 3.90% | 93.22% | 25.6 |
+| 3,488 | 27,366 | 1,143 | 110 | 4.18% | 91.22% | 23.9 |
+| 4,009 | 24,805 | 1,121 | 132 | 4.52% | 89.47% | 22.1 |
+| 4,621 | 22,244 | 1,087 | 166 | 4.89% | 86.75% | 20.5 |
+| 5,431 | 19,611 | 1,056 | 197 | 5.38% | 84.28% | 18.6 |
+| 6,390 | 16,943 | 1,002 | 251 | 5.91% | 79.97% | 16.9 |
+| 7,802 | 14,275 | 944 | 309 | 6.61% | 75.34% | 15.1 |
+| 9,942 | 11,607 | 858 | 395 | 7.39% | 68.48% | 13.5 |
+| 13,344 | 8,939 | 746 | 507 | 8.35% | 59.54% | 12.0 |
+| 18,503 | 6,271 | 593 | 660 | 9.46% | 47.33% | 10.6 |
+| 26,905 | 3,603 | 404 | 849 | 11.21% | 32.24% | 8.9 |
+| 50,884 | 935 | 151 | 1,102 | 16.15% | 12.05% | 6.2 |
 
 ## 6. Below-the-line testing
 
-A simple random sample of 753 records was drawn from the 38,713 records the rule does not alert on. 18 were true cases.
+A simple random sample of 753 records was drawn from the 38,713 records the rule does not alert on. 11 were true cases.
 
-- Observed below-the-line productive rate: **2.39%**
-- 95% Wilson confidence interval: 1.52% to 3.75%
-- Estimated cases missed across the full below-the-line population: **925** (upper bound 1,451)
+- Observed below-the-line productive rate: **1.46%**
+- 95% Wilson confidence interval: 0.82% to 2.60%
+- Estimated cases missed across the full below-the-line population: **566** (upper bound 1,005)
 
 The upper bound is the figure to test against risk appetite: it is the worst case the sample is consistent with, not the best guess.
 
@@ -81,53 +81,53 @@ The upper bound is the figure to test against risk appetite: it is the worst cas
 
 | Segment | Global £ | Alerts | Cases | Calibrated £ | Alerts | Cases | Uplift |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| CORPORATE | 58,522 | 3,666 | 285 | 27,066 | 4,260 | 331 | +46 |
-| PRIVATE | 58,522 | 852 | 140 | 18,451 | 1,196 | 196 | +56 |
-| RETAIL | 58,522 | 0 | 0 | none | 0 | 0 | +0 |
-| SME | 58,522 | 1,780 | 102 | 76,484 | 817 | 51 | -51 |
-| TOTAL | 58,522 | 6,298 | 527 | n/a | 6,273 | 578 | +51 |
+| CORPORATE | 18,449 | 922 | 117 | 6,812 | 3,126 | 299 | +182 |
+| PRIVATE | 18,449 | 1,069 | 179 | 9,770 | 1,196 | 196 | +17 |
+| RETAIL | 18,449 | 21 | 0 | 17,498 | 30 | 2 | +2 |
+| SME | 18,449 | 4,286 | 299 | 29,828 | 1,946 | 169 | -130 |
+| TOTAL | 18,449 | 6,298 | 595 | n/a | 6,298 | 666 | +71 |
 
 Both options are costed at the same total alert budget, so the uplift column is additional detection for no additional investigator effort.
 
 ## 8. Stability and drift
 
-Performance was recomputed independently in each period. 21 of 24 periods breached at least one control limit.
+Performance was recomputed independently in each period. 20 of 24 periods breached at least one control limit.
 
 
 | Period | Alerts | Cases | Precision | Recall | PSI | Stability | Breach |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2024-01 | 265 | 22 | 8.30% | 46.81% | 0.000 | stable | 1 |
-| 2024-02 | 267 | 13 | 4.87% | 30.95% | 0.012 | stable | 1 |
-| 2024-03 | 322 | 18 | 5.59% | 37.50% | 0.014 | stable | 0 |
-| 2024-04 | 323 | 27 | 8.36% | 42.19% | 0.021 | stable | 0 |
-| 2024-05 | 324 | 27 | 8.33% | 45.76% | 0.025 | stable | 0 |
-| 2024-06 | 364 | 28 | 7.69% | 46.67% | 0.044 | stable | 1 |
-| 2024-07 | 368 | 32 | 8.70% | 49.23% | 0.057 | stable | 1 |
-| 2024-08 | 389 | 35 | 9.00% | 42.68% | 0.090 | stable | 1 |
-| 2024-09 | 356 | 30 | 8.43% | 40.54% | 0.067 | stable | 1 |
-| 2024-10 | 412 | 28 | 6.80% | 45.16% | 0.078 | stable | 1 |
-| 2024-11 | 420 | 32 | 7.62% | 47.06% | 0.114 | moderate shift | 1 |
-| 2024-12 | 471 | 43 | 9.13% | 49.43% | 0.131 | moderate shift | 1 |
-| 2025-01 | 465 | 47 | 10.11% | 62.67% | 0.135 | moderate shift | 1 |
-| 2025-02 | 475 | 34 | 7.16% | 53.97% | 0.172 | moderate shift | 1 |
-| 2025-03 | 480 | 46 | 9.58% | 56.10% | 0.197 | moderate shift | 1 |
-| 2025-04 | 497 | 47 | 9.46% | 48.45% | 0.174 | moderate shift | 1 |
-| 2025-05 | 509 | 35 | 6.88% | 52.24% | 0.204 | moderate shift | 1 |
-| 2025-06 | 512 | 39 | 7.62% | 50.65% | 0.244 | moderate shift | 1 |
-| 2025-07 | 538 | 48 | 8.92% | 56.47% | 0.258 | significant shift | 1 |
-| 2025-08 | 580 | 46 | 7.93% | 54.12% | 0.293 | significant shift | 1 |
-| 2025-09 | 552 | 48 | 8.70% | 53.33% | 0.281 | significant shift | 1 |
-| 2025-10 | 624 | 56 | 8.97% | 57.14% | 0.326 | significant shift | 1 |
-| 2025-11 | 614 | 58 | 9.45% | 58.00% | 0.333 | significant shift | 1 |
-| 2025-12 | 627 | 66 | 10.53% | 63.46% | 0.355 | significant shift | 1 |
+| 2024-01 | 465 | 35 | 7.53% | 63.64% | 0.000 | stable | 1 |
+| 2024-02 | 480 | 34 | 7.08% | 72.34% | 0.003 | stable | 0 |
+| 2024-03 | 519 | 39 | 7.51% | 70.91% | 0.010 | stable | 0 |
+| 2024-04 | 546 | 49 | 8.97% | 72.06% | 0.013 | stable | 0 |
+| 2024-05 | 529 | 38 | 7.18% | 61.29% | 0.017 | stable | 0 |
+| 2024-06 | 576 | 46 | 7.99% | 71.88% | 0.036 | stable | 1 |
+| 2024-07 | 598 | 42 | 7.02% | 66.67% | 0.056 | stable | 1 |
+| 2024-08 | 583 | 41 | 7.03% | 56.94% | 0.049 | stable | 1 |
+| 2024-09 | 601 | 48 | 7.99% | 66.67% | 0.051 | stable | 1 |
+| 2024-10 | 624 | 48 | 7.69% | 72.73% | 0.081 | stable | 1 |
+| 2024-11 | 674 | 43 | 6.38% | 70.49% | 0.110 | moderate shift | 1 |
+| 2024-12 | 720 | 71 | 9.86% | 78.02% | 0.110 | moderate shift | 1 |
+| 2025-01 | 743 | 45 | 6.06% | 65.22% | 0.126 | moderate shift | 1 |
+| 2025-02 | 731 | 44 | 6.02% | 64.71% | 0.153 | moderate shift | 1 |
+| 2025-03 | 793 | 57 | 7.19% | 70.37% | 0.170 | moderate shift | 1 |
+| 2025-04 | 779 | 65 | 8.34% | 68.42% | 0.211 | moderate shift | 1 |
+| 2025-05 | 774 | 51 | 6.59% | 68.00% | 0.190 | moderate shift | 1 |
+| 2025-06 | 802 | 61 | 7.61% | 68.54% | 0.199 | moderate shift | 1 |
+| 2025-07 | 806 | 61 | 7.57% | 71.76% | 0.200 | moderate shift | 1 |
+| 2025-08 | 834 | 54 | 6.47% | 70.13% | 0.246 | moderate shift | 1 |
+| 2025-09 | 861 | 69 | 8.01% | 79.31% | 0.266 | significant shift | 1 |
+| 2025-10 | 883 | 63 | 7.13% | 67.74% | 0.315 | significant shift | 1 |
+| 2025-11 | 965 | 75 | 7.77% | 75.00% | 0.350 | significant shift | 1 |
+| 2025-12 | 925 | 90 | 9.73% | 79.65% | 0.338 | significant shift | 1 |
 
 ## 9. Champion vs challenger
 
 | rule | alerts | tp | fn | precision | recall |
 | --- | --- | --- | --- | --- | --- |
-| TM-014 incumbent | 7,219 | 583 | 636 | 8.08% | 47.83% |
-| TM-014 re-tuned | 6,271 | 526 | 693 | 8.39% | 43.15% |
-| TM-014 + risk overlay | 6,699 | 613 | 606 | 9.15% | 50.29% |
+| TM-021 incumbent | 11,537 | 857 | 396 | 7.43% | 68.40% |
+| TM-021 re-tuned | 6,271 | 593 | 660 | 9.46% | 47.33% |
+| TM-021 + risk overlay | 6,875 | 681 | 572 | 9.91% | 54.35% |
 
 
 Netted metrics conceal reallocation, so the overlap is broken out below. The 'Champion only' row is risk the challenger would newly miss.
@@ -135,10 +135,10 @@ Netted metrics conceal reallocation, so the overlap is broken out below. The 'Ch
 
 | Cell | Records | True cases | Share of all cases | Precision |
 | --- | --- | --- | --- | --- |
-| Both alert | 6,271 | 526 | 43.15% | 8.39% |
+| Both alert | 6,271 | 593 | 47.33% | 9.46% |
 | Champion only | 0 | 0 | 0.00% | n/a |
-| Challenger only | 428 | 87 | 7.14% | 20.33% |
-| Neither alerts | 38,285 | 606 | 49.71% | 1.58% |
+| Challenger only | 604 | 88 | 7.02% | 14.57% |
+| Neither alerts | 38,109 | 572 | 45.65% | 1.50% |
 
 ## 10. Limitations and assumptions
 
@@ -146,7 +146,7 @@ Netted metrics conceal reallocation, so the overlap is broken out below. The 'Ch
 
 - Backtesting assumes historical behaviour is representative of the forward period. Any known upcoming change in product, customer mix or typology invalidates that assumption and should be raised before implementation.
 
-- The population is drifting (PSI 0.35 in the final period). The recommended threshold fits capacity in the tuning window but is projected to exceed it within the holdout, so it should be treated as valid for two quarters and re-assessed, not set annually.
+- The population is drifting (PSI 0.34 in the final period). The recommended threshold fits capacity in the tuning window but is projected to exceed it within the holdout, so it should be treated as valid for two quarters and re-assessed, not set annually.
 
 - Segment data quality has not been assessed. Segment-specific thresholds make segment assignment an AML control, and that dependency must be confirmed before recommendation 2 is implemented.
 

@@ -1,19 +1,25 @@
 # %% [markdown]
-# # Week 9 -- Producing Validation-Ready Tuning Papers
+# # Week 9 -- Validation and Governance
 #
-# **Concept:** The analysis is not the deliverable. A tuning change is approved
-# or rejected on a document, and analysis that cannot be written up in the
-# expected shape does not get implemented.
+# **Concept:** A tuning exercise only succeeds if it is defensible.
 #
 # **Topics**
 #
-# * What independent validation actually checks
-# * The standard section structure
-# * Writing limitations that strengthen rather than weaken a paper
-# * Generating the paper from the analysis, not retyping it
+# * Model governance
+# * Documentation standards
+# * Evidence retention
+# * Independent challenge
+# * Limitations analysis
 #
-# **Success criteria.** Produce a complete tuning paper, generated directly
-# from analysis outputs, that answers a validator's questions before they ask.
+# **Exercise.** Write a mini tuning paper containing:
+#
+# * **Background** -- current rule
+# * **Method** -- data and testing approach
+# * **Results** -- metrics and analysis
+# * **Recommendation** -- threshold choice
+# * **Limitations** -- bias and assumptions
+#
+# **Success criteria.** Produce validation-ready documentation.
 
 # %%
 # --- path bootstrap ---
@@ -29,9 +35,9 @@ for _p in pathlib.Path(__file__ if "__file__" in globals() else "x").resolve().p
 import pandas as pd
 
 from tmtuning import (answer, banner, apply_rule, btl_test, compare_rules,
-                      compare_uniform_vs_segmented, generate_population, optimise_threshold,
-                      rule_overlap, save_paper, show, stability_report, threshold_sweep,
-                      tuning_paper)
+                      compare_uniform_vs_segmented, generate_population, mini_tuning_paper,
+                      optimise_threshold, rule_overlap, save_paper, show, stability_report,
+                      threshold_sweep, tuning_paper)
 
 OUT = _ROOT / "outputs"
 CAPACITY = 2_500
@@ -72,6 +78,73 @@ Note that only two of the ten are about the threshold number. Most of a
 validator's time goes on whether the evidence supports ANY conclusion, and
 the most common reason a paper is returned is not a wrong threshold -- it is
 an unstated label definition or an unquantified below-the-line position.
+""")
+
+# %% [markdown]
+# ## 1b. Model governance and evidence retention
+
+# %%
+banner("1b. GOVERNANCE AND EVIDENCE RETENTION")
+
+governance = pd.DataFrame([
+    ("Ownership", "Who owns the rule, and who owns the threshold?",
+     "Often different people. The financial crime risk owner accepts the risk; "
+     "the operations lead accepts the volume. Both must sign."),
+    ("Change control", "How does a threshold change reach production?",
+     "The approved number and the implemented number must be reconciled after "
+     "release. Papers approving £75,000 and engines running £70,000 are common."),
+    ("Version control", "Which version of the rule does this paper describe?",
+     "A paper without a rule version cannot be matched to what was running."),
+    ("Re-tuning cycle", "When is this revisited?",
+     "Annual by default; sooner on a monitoring trigger. State which."),
+    ("Evidence retention", "What is kept, where, and for how long?",
+     "The data extract, the code, the parameters and the outputs -- enough to "
+     "reproduce the result years later, when the author has left."),
+    ("Independent challenge", "Who reviews this, and are they independent?",
+     "Independent means not in the reporting line of the person who wrote it."),
+], columns=["Area", "The question", "What good looks like"])
+show(governance, "The governance wrapper around the analysis")
+
+print("""
+The retention point is the one most often underdone, and it is the one that
+hurts later. A tuning paper is a control artefact: a regulator may ask, three
+years on, how a threshold was set. "We ran a sweep and chose £75,000" is not a
+reproducible answer.
+
+What has to survive is enough to re-run the analysis and get the same number:
+the data extract or its query, the code, the random seeds, the parameters, and
+the outputs. This is the strongest practical argument for generating the paper
+from code rather than assembling it by hand -- the code IS the retained
+evidence, and it cannot drift from the document it produced.
+""")
+
+# %% [markdown]
+# ## 1c. Independent challenge -- rehearse it
+
+# %%
+banner("1c. INDEPENDENT CHALLENGE")
+
+challenges = pd.DataFrame([
+    ("Why this threshold and not the one either side of it?",
+     "Show the sweep and the constraint. If the neighbours perform nearly "
+     "identically, say so -- a flat optimum is a finding, not a weakness."),
+    ("What is your label definition, and how sparse is it?",
+     "State it, and state the direction of the bias it creates."),
+    ("What risk does this change accept?",
+     "A number, not a reassurance. Cases no longer alerted, with an interval."),
+    ("Would this hold on data you did not tune on?",
+     "Out-of-time results. If you did not hold data back, that is the answer."),
+    ("How will you know when it stops working?",
+     "Named metrics, trigger levels, frequencies, and an owner for the action."),
+    ("What would change your recommendation?",
+     "If nothing would, the recommendation was not derived from the evidence."),
+], columns=["The question a validator asks", "What answers it"])
+show(challenges, "Rehearse these before the meeting, not during it")
+
+print("""
+The last one is the most revealing and the least expected. An author who cannot
+name the evidence that would have changed their mind has usually decided first
+and assembled support afterwards -- and a good validator can tell.
 """)
 
 # %% [markdown]
@@ -169,7 +242,47 @@ they are told by how much and in which direction.
 # ## 4. Generate the paper
 
 # %%
-banner("4. GENERATING THE PAPER")
+banner("4a. THE EXERCISE -- A MINI TUNING PAPER")
+
+mini = mini_tuning_paper(
+    rule_name="TM-014 High Value Outbound Wires",
+    current_rule=f"ALERT IF monthly_outbound_wire_value > {CURRENT_THRESHOLD:,}\n"
+                 "  scope: all active customers\n"
+                 "  frequency: monthly, run on the 1st for the preceding calendar month",
+    population=population,
+    sweep=sweep,
+    proposed=proposed,
+    current=current,
+    author="Dan Hartwig",
+    method_notes=[
+        f"Operational constraint: {CAPACITY:,} alerts per period.",
+        "Objective: maximise recall subject to that constraint.",
+        "Out-of-time validation on periods held back from tuning.",
+    ],
+    limitations=[
+        "Coverage overlap with TM-009 (rapid movement of funds) has not been "
+        "assessed; some cases counted here may also be detected by that rule.",
+    ],
+)
+mini_path = save_paper(OUT / "week09_mini_tuning_paper.md", mini)
+print(f"Written to {mini_path}  ({len(mini.splitlines())} lines)")
+print("\nSections: " + ", ".join(
+    line[3:] for line in mini.splitlines() if line.startswith("## ")))
+print("""
+Five sections, two pages, and it is the version that actually gets read by the
+people who decide. The fuller paper below carries the supporting evidence for
+the validator who will go through it line by line.
+
+Both come from the same analysis objects, so they cannot disagree with each
+other -- which is a real failure mode when a summary is written by hand from a
+longer document and then one of them is updated.
+""")
+
+# %% [markdown]
+# ## 4b. The full paper
+
+# %%
+banner("4b. THE FULL PAPER")
 
 paper = tuning_paper(
     rule_name="TM-014 High Value Outbound Wires",

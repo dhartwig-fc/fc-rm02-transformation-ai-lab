@@ -181,3 +181,43 @@ def test_spec_challenger_beats_incumbent_on_precision():
         df["case"], (df["monthly_wire_value"] > 30_000) & (df["velocity"] > 5))
     assert challenger["precision"] > incumbent["precision"]
     assert challenger["alerts"] < incumbent["alerts"]
+
+
+# --- jurisdiction tiers (Week 8 geo_score) --------------------------------
+
+def test_jurisdiction_tiers_are_ordered_by_case_rate():
+    df = generate_population(n=40_000, seed=808)
+    rates = df.groupby("jurisdiction_risk")["case"].mean()
+    assert rates["DOMESTIC"] < rates["STANDARD"] < rates["ELEVATED"] < rates["HIGH"]
+
+
+def test_high_risk_jurisdiction_flag_matches_the_top_tier():
+    """Rules written against the binary flag must behave exactly as before."""
+    df = generate_population(n=20_000, seed=808)
+    assert ((df["jurisdiction_risk"] == "HIGH").astype(int) == df["high_risk_jurisdiction"]).all()
+
+
+# --- mini tuning paper (Week 9) -------------------------------------------
+
+def test_mini_tuning_paper_has_the_five_specified_sections():
+    from tmtuning.reporting import mini_tuning_paper
+    population = generate_population(n=8_000, seed=909, n_periods=12)
+    sweep = threshold_sweep(population, "monthly_wire_value", "case", n_thresholds=20)
+    current = threshold_sweep(population, "monthly_wire_value", "case", thresholds=[50_000]).iloc[0]
+    proposed = optimise_threshold(sweep, max_alerts=400)
+
+    paper = mini_tuning_paper("TM-014", "ALERT IF wire > 50000", population, sweep,
+                              proposed, current)
+    headings = [line[3:] for line in paper.splitlines() if line.startswith("## ")]
+    assert headings == ["Background", "Method", "Results", "Recommendation", "Limitations"]
+
+
+def test_mini_tuning_paper_states_the_direction_of_label_bias():
+    from tmtuning.reporting import mini_tuning_paper
+    population = generate_population(n=8_000, seed=909, n_periods=12)
+    sweep = threshold_sweep(population, "monthly_wire_value", "case", n_thresholds=20)
+    current = threshold_sweep(population, "monthly_wire_value", "case", thresholds=[50_000]).iloc[0]
+    paper = mini_tuning_paper("TM-014", "x", population, sweep,
+                              optimise_threshold(sweep, max_alerts=400), current)
+    assert "optimistic" in paper
+    assert "overstates" in paper

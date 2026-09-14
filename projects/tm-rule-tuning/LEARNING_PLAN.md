@@ -2,32 +2,36 @@
 
 ## Provenance of this plan
 
-The supplied specification covers the learning outcomes, the environment
-assumption, and **Weeks 1 to 6**. Those are transcribed here as written.
+**All ten weeks are transcribed from the supplied specification.** Nothing here
+is extrapolated.
 
-Weeks 7 to 10 were not in the supplied material. They are derived from the nine
-stated learning outcomes — specifically the three that Weeks 1–6 do not cover —
-and are marked *(extrapolated)*. If you have the rest of the original
-specification, compare it against the mapping below and say where it differs;
-the week scripts are independent, so any one can be rewritten without touching
-the others.
+Each week records the spec's Concept, Topics, Exercise, Deliverable and Success
+Criteria as written. Where a week's runnable script goes beyond the spec, it is
+either building the machinery the exercise needs, or flagging something the
+exercise itself reveals — noted in a blockquote under that week.
 
-| Outcome (from the spec) | Covered in | Source |
-| --- | --- | --- |
-| Design labelled and proxy-labelled backtests | Weeks 1, 2 | spec |
-| Tune transaction-monitoring thresholds using evidence | Week 3 | spec |
-| Quantify precision/recall trade-offs | Weeks 1, 3 | spec |
-| Build alert-volume and risk-yield curves | Weeks 3, 4 | spec |
-| Conduct segment-specific calibration | Week 5 | spec |
-| Compare incumbent versus challenger rules | Week 6 | spec |
-| Identify instability and model drift | Week 7 | *extrapolated* |
-| Produce validation-ready tuning papers | Week 9 | *extrapolated* |
-| Execute a complete TM backtest and calibration exercise | Week 10 | *extrapolated* |
+| Outcome (from the spec) | Covered in |
+| --- | --- |
+| Design labelled and proxy-labelled backtests | Weeks 1, 2 |
+| Tune transaction-monitoring thresholds using evidence | Week 3 |
+| Quantify precision/recall trade-offs | Weeks 1, 3 |
+| Build alert-volume and risk-yield curves | Weeks 3, 4 |
+| Conduct segment-specific calibration | Week 5 |
+| Compare incumbent versus challenger rules | Week 6 |
+| Identify instability and model drift | Week 7 |
+| Produce validation-ready tuning papers | Weeks 8, 9 |
+| Execute a complete TM backtest and calibration exercise | Week 10 |
 
-Week 8 (above/below-the-line testing) is extrapolated and maps to no single
-outcome. It is included because the missed-risk estimate it produces is the
-evidence a model validator asks for first, and without it Weeks 9 and 10 have
-nothing to report on risk acceptance.
+### Supplementary material
+
+One topic sits outside the ten weeks, in `extras/`:
+
+**Above and below-the-line (ATL/BTL) testing** — `extras/atl_btl_testing.py`.
+Below-the-line sampling is normally the first evidence a model validator asks
+for with a threshold change, and it is what turns Week 9's *Limitations — bias
+and assumptions* from an assertion into a measured bound. The spec does not
+include it, so it is supplementary rather than displacing a week. Run it after
+Week 6.
 
 ## Learning Outcomes
 
@@ -339,77 +343,142 @@ Compare both rules.
 
 ---
 
-## WEEK 7: STABILITY, INSTABILITY AND MODEL DRIFT *(extrapolated)*
+## WEEK 7: STABILITY & DRIFT TESTING
 
-*(The supplied specification ends after Week 6. Weeks 7-10 are extrapolated.)*
-
-**Concept.** A threshold is tuned against one snapshot of behaviour. Behaviour
-then moves.
+**Concept.** A rule that works in one period may fail later.
 
 **Topics**
 
-- Period-by-period performance versus a pooled figure
-- Population Stability Index (PSI)
-- Control charts, and where the limits must come from
-- Distinguishing population drift from rule decay
-- Setting monitoring triggers that can actually fire
+- Population stability
+- Behaviour change
+- Data drift
+- Seasonality
 
-**Success Criteria.** Detect drift in a population you were not told was
-drifting, and say which kind it is.
+**Exercise**
+
+Create three periods:
+
+- Year 1
+- Year 2
+- Year 3
+
+Simulate distribution changes.
+
+Calculate:
+
+- Alert rates
+- Precision
+- Recall
+
+**Python Technique**
+
+```python
+from scipy.stats import ks_2samp
+```
+
+**Success Criteria.** Identify unstable thresholds and propose mitigants.
+
+> **A note on the KS test.** Read the KS *statistic*, not the p-value. KS power
+> grows with sample size, so on tens of thousands of records the p-value is
+> vanishing for any difference at all, including differences far too small to
+> move a threshold. The week runs a same-distribution control (a random split of
+> Year 1) to establish the noise floor a real comparison has to clear.
 
 > Run it: `python weeks/week07_stability_and_drift.py`
 
 ---
 
-## WEEK 8: ABOVE AND BELOW-THE-LINE TESTING *(extrapolated)*
+## WEEK 8: ADVANCED CALIBRATION USING SCORING
 
-**Concept.** Every metric so far measures risk the rule already found.
-Below-the-line testing measures the risk it did not.
+**Concept.** Move beyond a single threshold.
 
 **Topics**
 
-- Above-the-line (ATL) and below-the-line (BTL) testing
-- Sample size planning
-- Wilson confidence intervals, and why not the textbook (Wald) interval
-- Extrapolating a sample rate to the full below-the-line population
+- Risk scoring
+- Weighted indicators
+- Probability estimates
+- Score cut-offs
 
-**Success Criteria.** State the missed-risk estimate with a confidence
-interval, and size the sample before drawing it.
+**Scoring Rule**
 
-> Run it: `python weeks/week08_atl_btl_testing.py`
+```python
+score = (
+    amount_score * 0.5 +
+    velocity_score * 0.3 +
+    geo_score * 0.2
+)
+```
+
+**Exercise**
+
+Create:
+
+- Deciles
+- Score distributions
+- Yield by decile
+
+**Deliverable.** Determine optimal score cut-off.
+
+**Success Criteria.** Justify chosen cut-off using evidence rather than
+intuition.
+
+> **A note on the components.** They must be made commensurable before they are
+> weighted. Raw pounds alongside a raw transaction count makes the weights
+> decorative — amount decides every alert whatever number sits beside it. The
+> week uses percentile ranks for amount and velocity, and an explicit lookup for
+> the jurisdiction tier, since a tier is an ordered judgement rather than a
+> measurement.
+
+> Run it: `python weeks/week08_scoring_calibration.py`
 
 ---
 
-## WEEK 9: PRODUCING VALIDATION-READY TUNING PAPERS *(extrapolated)*
+## WEEK 9: VALIDATION & GOVERNANCE
 
-**Concept.** The analysis is not the deliverable. A tuning change is approved or
-rejected on a document.
+**Concept.** A tuning exercise only succeeds if it is defensible.
 
 **Topics**
 
-- The ten areas independent validation checks
-- The standard section structure
-- Writing limitations that strengthen rather than weaken a paper
-- Generating the paper from the analysis rather than retyping it
+- Model governance
+- Documentation standards
+- Evidence retention
+- Independent challenge
+- Limitations analysis
 
-**Success Criteria.** Produce a complete tuning paper, generated directly from
-analysis outputs, that answers a validator's questions before they ask.
+**Exercise**
+
+Write a mini tuning paper containing:
+
+**Background**
+- Current rule
+
+**Method**
+- Data and testing approach
+
+**Results**
+- Metrics and analysis
+
+**Recommendation**
+- Threshold choice
+
+**Limitations**
+- Bias and assumptions
+
+**Success Criteria.** Produce validation-ready documentation.
 
 > Run it: `python weeks/week09_tuning_papers.py`
 
 ---
 
-## WEEK 10: CAPSTONE — COMPLETE BACKTEST AND CALIBRATION EXERCISE *(extrapolated)*
+## WEEK 10: CAPSTONE BACKTEST & CALIBRATION PROJECT
 
-**The brief.**
+**Objective.** Complete an end-to-end transaction-monitoring tuning engagement.
 
-> Rule TM-014 (*monthly outbound wires > £50,000*) has been in production for
-> two years without re-tuning. Operations report the alert queue is growing and
-> investigators say yield has fallen. Capacity is 350 alerts per month and there
-> is no budget for more.
->
-> Determine whether the rule is still fit for purpose, recommend a calibration,
-> and produce a paper for independent validation.
+**Capstone Scenario**
+
+Existing rule:
+
+> Cash deposits > £10k in 30 days
 
 **Steps**
 
@@ -422,7 +491,11 @@ analysis outputs, that answers a validator's questions before they ask.
 7. Compare against a challenger
 8. Recommend, and generate the paper
 
-**Success Criteria.** A defensible recommendation, evidence for each of the ten
-validation areas from Week 9, and a generated paper.
+> **A note on incremental risk.** Differencing two sampled below-the-line
+> estimates is the intuitive way to price a threshold change and it does not
+> work: the sampling error is routinely larger than the effect. Tightening a
+> threshold means the records you stop alerting on were *above* the historical
+> line, so they carry real dispositions — count them rather than sampling them.
+> Only loosening requires an estimate.
 
 > Run it: `python weeks/week10_capstone.py`

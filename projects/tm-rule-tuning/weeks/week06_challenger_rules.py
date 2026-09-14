@@ -23,6 +23,11 @@
 #
 # **Python Exercise.** Generate `velocity`, `amount` and `customer_risk`.
 # Compare both rules.
+#
+# **Metrics.** Evaluate precision, recall and volume.
+#
+# **Success criteria.** Determine whether the challenger merits further
+# validation.
 
 # %%
 # --- path bootstrap ---
@@ -173,27 +178,24 @@ narrowed the bank's coverage, whatever its precision does.
 # ## 5. Composite scores
 
 # %%
-banner("5. COMPOSITE SCORES")
+banner("5. COMPOSITE SCORES -- A PREVIEW")
 
 print("""
-A binary rule forces every indicator to a hard cut. A composite score keeps
-the gradient: a customer just under the amount cut but well over on velocity
-and carrying a HIGH rating can still surface.
+A binary rule forces every indicator to a hard cut. A composite score keeps the
+gradient: a customer just under the amount cut but well over on velocity, and
+sitting in a high-risk jurisdiction, can still surface.
+
+Here it is in outline, to show what the AND is throwing away. Week 8 builds it
+properly -- weighted components, deciles, yield by decile and a justified
+cut-off.
 """)
 
 
-def composite_score(df: pd.DataFrame) -> np.ndarray:
-    """A transparent additive score: points for each risk indicator.
-
-    Deliberately points-based rather than a fitted model. Every weight is a
-    round number an investigator can see, and the rationale for each is a
-    sentence. That is the property Week 6 is testing -- a logistic regression
-    would score better and would be far harder to put in front of a reviewer.
-    """
+def preview_score(df: pd.DataFrame) -> np.ndarray:
+    """Points for each risk indicator. Deliberately round numbers a person chose."""
     amount_points = np.select(
         [df["monthly_wire_value"] > 100_000, df["monthly_wire_value"] > 50_000,
-         df["monthly_wire_value"] > 30_000],
-        [3, 2, 1], default=0)
+         df["monthly_wire_value"] > 30_000], [3, 2, 1], default=0)
     velocity_points = np.select(
         [df["velocity"] > 8, df["velocity"] > 5, df["velocity"] > 3], [3, 2, 1], default=0)
     risk_points = np.select(
@@ -201,34 +203,26 @@ def composite_score(df: pd.DataFrame) -> np.ndarray:
     return amount_points + velocity_points + risk_points + 2 * df["high_risk_jurisdiction"].to_numpy()
 
 
-in_time_scored = in_time.assign(score=composite_score(in_time))
-show(in_time_scored.groupby("score").agg(
-        records=("case", "size"), cases=("case", "sum"), case_rate=("case", "mean")).reset_index(),
-     "Case rate by composite score")
-
-# %%
+in_time_scored = in_time.assign(score=preview_score(in_time))
 incumbent_alerts = int(np.asarray(champion_flags).sum())
+
 rows = []
 for cut in range(3, 10):
-    flags = in_time_scored["score"] >= cut
-    rows.append({"score_cutoff": cut, **classification_metrics(in_time["case"], flags)})
+    rows.append({"score_cutoff": cut,
+                 **classification_metrics(in_time["case"], in_time_scored["score"] >= cut)})
 score_sweep = pd.DataFrame(rows)
-show(score_sweep[["score_cutoff", "alerts", "tp", "precision", "recall",
-                  "alerts_per_true_positive"]],
-     "Composite score at each cut-off")
 
-# Compare like for like: the score cut-off closest to the incumbent's volume.
 matched = score_sweep.iloc[(score_sweep["alerts"] - incumbent_alerts).abs().argmin()]
 incumbent_metrics = classification_metrics(in_time["case"], champion_flags)
-print(f"\n  At matched alert volume (~{incumbent_alerts:,} alerts):")
+print(f"  At matched alert volume (~{incumbent_alerts:,} alerts):")
 print(f"    incumbent        precision {incumbent_metrics['precision']:.2%}  "
       f"recall {incumbent_metrics['recall']:.2%}")
 print(f"    composite (>={int(matched['score_cutoff'])})  precision {matched['precision']:.2%}  "
       f"recall {matched['recall']:.2%}  ({int(matched['alerts']):,} alerts)")
 print("""
-  Comparing at matched volume is the only fair test. A composite score set to
-  fire more often will of course find more cases; the question is whether it
-  finds more for the same investigator effort.
+  Matched volume is the only fair test. A score set to fire more often will of
+  course find more cases; the question is whether it finds more for the same
+  investigator effort. Week 8 does this properly.
 """)
 
 # %% [markdown]
@@ -327,7 +321,25 @@ fitted to the tuning window.
 # ## 8. The decision
 
 # %%
-banner("8. DECISION FRAMEWORK")
+banner("8. METRICS -- PRECISION, RECALL, VOLUME")
+
+metrics_view = comparison[["alerts", "precision", "recall"]].copy()
+metrics_view["volume_vs_incumbent"] = (
+    comparison["alerts"] / comparison.loc["incumbent: amount > 50k", "alerts"] - 1)
+show(metrics_view.reset_index(), "The three numbers the spec asks for, side by side")
+
+print("""
+Volume belongs alongside precision and recall, not below them. A challenger
+with better precision and worse recall is a judgement call; one that also
+triples alert volume is not a judgement call, it is undeliverable, and the
+metrics table should make that visible without a separate capacity exercise.
+""")
+
+# %% [markdown]
+# ## 9. Success criteria: does the challenger merit further validation?
+
+# %%
+banner("9. DOES THE CHALLENGER MERIT FURTHER VALIDATION?")
 
 criteria = pd.DataFrame([
     ("Detection", "Recall at equal or lower alert volume", "Hard gate -- no regression without appetite sign-off"),
@@ -348,6 +360,35 @@ for those customers -- and fails closed on precisely the population the field
 was added to identify. Check field coverage before you check precision.
 """)
 
+print(f"""  VERDICT ON THE SPECIFIED CHALLENGER (amount > £30k AND velocity > 5)
+
+  Merits further validation: YES, with conditions.
+
+  FOR
+    Precision {comparison.loc['challenger: amount > 30k AND velocity > 5', 'precision']:.2%} against the incumbent's {comparison.loc['incumbent: amount > 50k', 'precision']:.2%}.
+    Alert volume falls {1 - comparison.loc['challenger: amount > 30k AND velocity > 5', 'alerts'] / comparison.loc['incumbent: amount > 50k', 'alerts']:.0%}, well inside capacity.
+    Effort per case improves from {comparison.loc['incumbent: amount > 50k', 'alerts_per_true_positive']:.1f} to {comparison.loc['challenger: amount > 30k AND velocity > 5', 'alerts_per_true_positive']:.1f} alerts.
+
+  AGAINST
+    Recall falls {comparison.loc['incumbent: amount > 50k', 'recall']:.1%} -> {comparison.loc['challenger: amount > 30k AND velocity > 5', 'recall']:.1%}, and the {champion_only:,} newly-missed cases are
+    concentrated in high-value low-velocity customers -- a coherent typology,
+    not a random sample. Coverage of that typology would have to be re-argued.
+
+  CONDITIONS BEFORE IT PROCEEDS
+    1. Field coverage for `velocity` confirmed in the production engine. A null
+       velocity fails the AND closed and silently drops the customer.
+    2. Parallel run for one quarter, comparing real dispositions on the
+       disjoint alerts -- that settles with outcomes what a backtest can only
+       estimate from proxy labels.
+    3. The variant adding customer risk (row 4) tested alongside it. It recovers
+       most of the lost recall at better precision, so validating the specified
+       challenger alone would be testing the weaker of two candidates.
+
+  "Merits further validation" is not "adopt". It means the evidence justifies
+  spending a quarter and a parallel run on it, which is the decision actually
+  in front of you at this stage.
+""")
+
 banner("END OF WEEK 6")
 print("""
 Carry forward into Week 7:
@@ -356,4 +397,5 @@ Carry forward into Week 7:
   * Always decompose the overlap, and look at WHO the challenger stops catching.
   * Composite scores buy detection with explainability. Both are real costs.
   * Compare at matched alert volume, and rank on out-of-time performance.
+  * Report volume beside precision and recall. Week 8 builds the score properly.
 """)

@@ -25,6 +25,7 @@ import pandas as pd
 __all__ = [
     "SEGMENTS",
     "CUSTOMER_RISK_LEVELS",
+    "JURISDICTION_TIERS",
     "SegmentProfile",
     "spec_population",
     "generate_population",
@@ -87,13 +88,19 @@ _BETA = {
     "cash_ratio": 0.70,
     "velocity": 0.55,
     "customer_risk": 0.65,
-    "high_risk_jurisdiction": 1.10,
+    "jurisdiction": 1.10,
     "pep": 0.90,
     "new_account": 0.60,
 }
 
 #: Ordinal encoding of the KYC customer risk rating, used as a model driver.
 CUSTOMER_RISK_LEVELS = {"LOW": 0.0, "MEDIUM": 1.0, "HIGH": 2.0}
+
+#: Jurisdiction risk tiers and their relative weight on the log-odds of risk.
+#: Tiered rather than binary because a geo score (Week 8) needs a gradient --
+#: and because "high risk country" is itself a tiered judgement in any real
+#: country risk methodology, not an on/off flag.
+JURISDICTION_TIERS = {"DOMESTIC": 0.0, "STANDARD": 0.3, "ELEVATED": 0.7, "HIGH": 1.0}
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
@@ -190,14 +197,18 @@ def generate_population(
     DataFrame with columns:
         ``customer_id``, ``period``, ``period_index``, ``segment``,
         ``monthly_wire_value``, ``monthly_cash_deposits``, ``txn_count``,
-        ``velocity``, ``cash_ratio``, ``customer_risk``,
+        ``velocity``, ``cash_ratio``, ``customer_risk``, ``jurisdiction_risk``,
         ``high_risk_jurisdiction``, ``pep_flag``, ``account_age_months``,
         ``risk_probability``, ``case``.
 
-    ``velocity`` is the count of outbound wire transactions in the period, and
-    ``customer_risk`` the KYC rating (LOW/MEDIUM/HIGH). Both are real risk
-    drivers in the generator, so a challenger rule built on them (Week 6) finds
-    genuine signal rather than noise.
+    ``velocity`` is the count of outbound wire transactions in the period,
+    ``customer_risk`` the KYC rating (LOW/MEDIUM/HIGH), and ``jurisdiction_risk``
+    the country tier (DOMESTIC/STANDARD/ELEVATED/HIGH). All three are real risk
+    drivers in the generator, so a challenger rule (Week 6) or a weighted score
+    (Week 8) built on them finds genuine signal rather than noise.
+
+    ``high_risk_jurisdiction`` is kept as a binary derived from the top tier, so
+    rules written against the flag behave exactly as before.
 
     Notes
     -----
@@ -247,7 +258,27 @@ def generate_population(
     monthly_cash_deposits = rng.gamma(2.0, cash_scale * inflation)
     txn_count = rng.poisson(txn_lambda) + 1
     velocity = rng.poisson(velocity_lambda)
-    high_risk_jurisdiction = rng.binomial(1, hrj_p)
+
+    # Jurisdiction tier. The HIGH tier keeps each segment's original high-risk
+    # probability, so `high_risk_jurisdiction` below is unchanged; the ELEVATED
+    # tier sits underneath it and carries part of the risk a binary flag misses.
+    tier_names = list(JURISDICTION_TIERS)
+    jurisdiction_risk = np.empty(n, dtype=object)
+    draw = rng.random(n)
+    for i in range(n):
+        p_high = hrj_p[i]
+        p_elevated = min(p_high * 2.5, 0.35)
+        if draw[i] < p_high:
+            jurisdiction_risk[i] = "HIGH"
+        elif draw[i] < p_high + p_elevated:
+            jurisdiction_risk[i] = "ELEVATED"
+        elif draw[i] < p_high + p_elevated + 0.35:
+            jurisdiction_risk[i] = "STANDARD"
+        else:
+            jurisdiction_risk[i] = "DOMESTIC"
+
+    jurisdiction_weight = np.vectorize(JURISDICTION_TIERS.__getitem__)(jurisdiction_risk)
+    high_risk_jurisdiction = (jurisdiction_risk == "HIGH").astype(int)
     pep_flag = rng.binomial(1, pep_p)
     account_age_months = rng.integers(1, 180, n)
 
@@ -278,7 +309,7 @@ def generate_population(
         + _BETA["cash_ratio"] * _z(cash_ratio)
         + _BETA["velocity"] * _z(velocity.astype(float))
         + _BETA["customer_risk"] * customer_risk_ordinal
-        + _BETA["high_risk_jurisdiction"] * high_risk_jurisdiction
+        + _BETA["jurisdiction"] * jurisdiction_weight
         + _BETA["pep"] * pep_flag
         + _BETA["new_account"] * (account_age_months < 12).astype(float)
         + risk_offset
@@ -301,6 +332,7 @@ def generate_population(
             "velocity": velocity,
             "cash_ratio": cash_ratio.round(4),
             "customer_risk": customer_risk,
+            "jurisdiction_risk": jurisdiction_risk,
             "high_risk_jurisdiction": high_risk_jurisdiction,
             "pep_flag": pep_flag,
             "account_age_months": account_age_months,
