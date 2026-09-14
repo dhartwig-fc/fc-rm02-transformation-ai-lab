@@ -22,6 +22,11 @@ so they run as plain Python *and* open as notebooks
 Suggested pace is in [Recommended weekly study cadence](#recommended-weekly-study-cadence)
 — roughly four hours a week.
 
+**If you are working through the course rather than looking something up, use
+[TRAINING_PLAN.md](TRAINING_PLAN.md) instead.** It turns this specification into
+a session-by-session schedule, each session built round a worked example with
+real numbers. This document stays the reference for what the curriculum covers.
+
 ## Provenance
 
 **All ten weeks are transcribed from the supplied specification.** Each week

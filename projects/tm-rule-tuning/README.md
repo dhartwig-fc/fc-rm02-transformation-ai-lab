@@ -11,8 +11,13 @@ Ten runnable weekly exercises that take you from "what is a confusion matrix"
 to a complete, validation-ready tuning paper. Every week is a script you run and
 read; there are no gaps to fill in from a slide deck.
 
-The curriculum is in **[LEARNING_PLAN.md](LEARNING_PLAN.md)**, transcribed from
-a supplied specification.
+Two documents sit alongside the code:
+
+- **[TRAINING_PLAN.md](TRAINING_PLAN.md)** — the week-by-week schedule you
+  actually follow. Four sessions a week, each built round a worked example with
+  real numbers: read it, run it, then do a variation yourself. **Start here.**
+- **[LEARNING_PLAN.md](LEARNING_PLAN.md)** — the curriculum as specified,
+  transcribed from the supplied specification. The reference, not the schedule.
 
 ## Quick start
 
@@ -26,6 +31,8 @@ python -c "import pandas, numpy, sklearn, matplotlib; print('Environment ready')
 # Work through the weeks in order
 python weeks/week01_tuning_framework.py
 ```
+
+Then open [TRAINING_PLAN.md](TRAINING_PLAN.md) and work through Week 1.
 
 Each week runs standalone and prints its own working. Charts and generated
 papers are written to `outputs/`.
