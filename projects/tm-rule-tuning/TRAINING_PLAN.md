@@ -30,6 +30,10 @@ pip install -r requirements.txt
 python -c "import pandas, numpy, sklearn, matplotlib; print('Environment ready')"
 ```
 
+If you want the tour of the codebase first — the tools, what each module does
+and why — read [docs/BUILD_WALKTHROUGH.md](docs/BUILD_WALKTHROUGH.md). It takes
+about fifteen minutes and makes the weeks easier to follow.
+
 Keep a file called `notes.md` beside you. Every Friday, write three things into
 it: what you ran, what surprised you, what you would tell a risk owner. By Week
 10 that file is more useful than anything in this repo.

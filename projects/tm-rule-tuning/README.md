@@ -18,6 +18,9 @@ Two documents sit alongside the code:
   real numbers: read it, run it, then do a variation yourself. **Start here.**
 - **[LEARNING_PLAN.md](LEARNING_PLAN.md)** — the curriculum as specified,
   transcribed from the supplied specification. The reference, not the schedule.
+- **[docs/BUILD_WALKTHROUGH.md](docs/BUILD_WALKTHROUGH.md)** — what was built and
+  how it works: the tools, the architecture, each module's job and the decision
+  it encodes, with the real output that proves it. Read once before Week 1.
 
 ## Quick start
 
