@@ -93,9 +93,10 @@ Ratings: **Adopt** (use now) · **Trial** (use in a bounded prototype) · **Asse
 ## 6. Roadmap
 
 ### Phase 1: Foundations (weeks 1–2)
-- [ ] `docker-compose.yml`: Ollama + Open WebUI, localhost only
+- [x] `docker-compose.yml`: Ollama + Open WebUI, localhost only (see [local-stack.md](local-stack.md))
 - [ ] Pull one capable local model and one small embedding model; record laptop RAM/VRAM limits
-- [ ] Sensitivity gate config + synthetic data generator (`data/synthetic/`)
+- [x] Sensitivity gate config + tests
+- [ ] Synthetic data generator (`data/synthetic/`)
 - [ ] Licence register (`docs/licences.md`)
 
 ### Phase 2: Capability layer (weeks 3–5)
