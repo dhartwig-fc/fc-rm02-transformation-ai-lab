@@ -15,3 +15,6 @@ __pycache__/
 
 # Graphify output: regenerable, and may contain extracted document text
 graphify-out/
+
+# Generated synthetic datasets (regenerate with: python3 -m synthgen)
+data/synthetic/
