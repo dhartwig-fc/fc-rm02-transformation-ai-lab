@@ -39,6 +39,17 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/check_prompt.py\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

@@ -99,8 +99,24 @@ python3 -m pytest tests/ -q
 ### Known limits (be honest about these)
 
 - Regex catches **identifiers**, not **meaning**. Names, addresses and narrative descriptions of a real person are not detected. The real control is: **no real data in this lab**.
-- The gate covers sub-agent delegation only. It does not stop the main Claude conversation from seeing data you paste in. Use Ollama / Open WebUI for anything sensitive.
+- ~~The gate covers sub-agent delegation only.~~ **Closed** by the prompt check below: what you type is now checked too. It still cannot see files Claude opens itself, so the `.gitignore` rules and "no real data" policy remain the backstop.
 - Synthetic data that *looks* real (e.g. generated IBANs) will also be blocked from delegation. That is intended: it rehearses the production behaviour.
+
+## Prompt check (your own messages)
+
+`.claude/hooks/check_prompt.py` runs on **every message you send**, before Claude sees it. It uses the same rules file as the gate, so one set of rules covers both checks.
+
+| Your message contains | Result |
+|---|---|
+| An identifier (IBAN, card, NINO, passport, SAR ref, API key...) | **Blocked.** The message is not sent. You see which rule matched, but never the value itself |
+| Only a restricted *path* (`data/real/`, `cases/`, `.env`...) | **Sent, with a warning.** Claude is told not to open those files. Editing `.gitignore` still works |
+| A first line starting `[synthetic-data]` | **Sent.** You attest the data is fake, and Claude is told so |
+| Broken rules file | **Blocked** (fails closed) |
+
+- The `[synthetic-data]` marker only works at the **start** of the message. A tag buried mid-message doesn't bypass the check, and that's tested.
+- Use it honestly: it's an attestation, like signing a customs declaration.
+
+Tests: `tests/test_prompt_check.py` reuses the gate's positive and negative examples, so the two checks can't drift apart.
 
 ## Verification log
 
