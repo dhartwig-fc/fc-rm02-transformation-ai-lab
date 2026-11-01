@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "docs/diagrams/lab-architecture-layers.html"
+        ],
+        "createdAt": "2026-11-01T15:36:26.363Z",
+        "reason": "Diagram Design editorial spec: SVG labels scale with the viewBox and eyebrow sizes follow its style guide"
+      }
+    ]
+  }
+}
