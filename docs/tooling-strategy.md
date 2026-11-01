@@ -96,7 +96,7 @@ Ratings: **Adopt** (use now) · **Trial** (use in a bounded prototype) · **Asse
 - [x] `docker-compose.yml`: Ollama + Open WebUI, localhost only (see [local-stack.md](local-stack.md))
 - [ ] Pull one capable local model and one small embedding model; record laptop RAM/VRAM limits
 - [x] Sensitivity gate config + tests
-- [ ] Synthetic data generator (`data/synthetic/`)
+- [ ] Synthetic data: use **Nexus** (`fc-10-intelligence-repository-layer`) estates and daily batches via a read-only local loader. Nexus is private and this repo is public, so never copy Nexus code or data in here
 - [ ] Licence register (`docs/licences.md`)
 - [x] Plugins: Graphify + Impeccable audited and installed (see [plugins.md](plugins.md))
 
