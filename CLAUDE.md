@@ -15,3 +15,4 @@ Rules:
 - `/graphify` semantic extraction over documents sends their text to a model: run it only on **public** material (FATF, regulator guidance, typology reports), never on anything under `data/real/`, `data/restricted/` or `cases/`.
 - Do **not** set `GEMINI_API_KEY` / `GOOGLE_API_KEY` in this project: graphify would send documents straight to Google, bypassing the sensitivity gate. `GRAPHIFY_BACKEND=ollama` is set in `.claude/settings.json` so CLI semantic passes stay on the local stack.
 - Impeccable is for UI work only. Telemetry is disabled via `IMPECCABLE_NO_TELEMETRY`; do not re-enable it.
+- Diagram Design: always ask for **offline / system-font output** (no Google Fonts link), so diagrams of operating models or bank architecture make no outside requests when opened. Diagrams are for public or synthetic content only.

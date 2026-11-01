@@ -1,4 +1,4 @@
-# Plugins: Graphify & Impeccable
+# Plugins: Graphify, Impeccable & Diagram Design
 
 Both were chosen from the "Top 30 Claude Code Plugins" list, and both were **audited before installing**. Both are installed **project-scoped**: the config is committed in this repo, so it travels with the repo and doesn't touch your other projects.
 
@@ -28,6 +28,17 @@ Both were chosen from the "Top 30 Claude Code Plugins" list, and both were **aud
 - **The engine binary** is downloaded once from GitHub Releases, **SHA-256 verified** against a checksum list shipped in the plugin, and refused on mismatch. Verified: it downloaded, verified and scanned a test file.
 - **Telemetry:** it is *on by default* for the design "roll" feature. It sends design-option choices and version info to `impeccable.style` (no code or project names, per the source). **Disabled here** with `IMPECCABLE_NO_TELEMETRY=1` and `DO_NOT_TRACK=1`.
 - **Optional image generation** calls OpenAI if you set a key. Don't set one in this project.
+
+### Diagram Design (added 2026-11-01)
+- **Repo:** [`cathrynlavery/diagram-design`](https://github.com/cathrynlavery/diagram-design), MIT licence.
+- **Pinned at:** commit `0cf73c3`, plugin v2.6.136.
+- **What it does:** a skill for editorial-quality HTML/SVG/PNG diagrams. It covers architecture, swimlanes, target operating model layers, Wardley maps, Sankey charts and more, and can import draw.io, Mermaid and Excalidraw files.
+- **Audit:**
+  - **No hooks and no MCP server.** It runs only when asked.
+  - **No telemetry and no server.** This matches its PRIVACY.md, and its scripts make no network calls.
+- **The one outbound call:** finished diagrams load fonts from Google Fonts when opened.
+  - **Lab rule:** always ask for **offline / system-font output** (recorded in `CLAUDE.md`). Its self-check has a matching `--offline` flag.
+- **Lab use:** target operating models, AI architecture and control-flow diagrams for stakeholders. Use public or synthetic content only.
 
 ## Setup on your machine
 

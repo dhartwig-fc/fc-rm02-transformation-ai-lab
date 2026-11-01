@@ -12,10 +12,18 @@
         "repo": "pbakaus/impeccable",
         "ref": "f5c80432f883a0ee437735305eafc2a9e1bdb7a0"
       }
+    },
+    "diagram-design": {
+      "source": {
+        "source": "github",
+        "repo": "cathrynlavery/diagram-design",
+        "ref": "0cf73c3fcc56667ad91a9a04c439ac6ccfabc9d1"
+      }
     }
   },
   "enabledPlugins": {
-    "impeccable@impeccable": true
+    "impeccable@impeccable": true,
+    "diagram-design@diagram-design": true
   },
   "hooks": {
     "PreToolUse": [
