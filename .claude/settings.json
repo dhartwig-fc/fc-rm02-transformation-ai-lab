@@ -1,0 +1,44 @@
+{
+  "env": {
+    "GRAPHIFY_BACKEND": "ollama",
+    "OLLAMA_MODEL": "qwen3:8b",
+    "IMPECCABLE_NO_TELEMETRY": "1",
+    "DO_NOT_TRACK": "1"
+  },
+  "extraKnownMarketplaces": {
+    "impeccable": {
+      "source": {
+        "source": "github",
+        "repo": "pbakaus/impeccable",
+        "ref": "f5c80432f883a0ee437735305eafc2a9e1bdb7a0"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "impeccable@impeccable": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "graphify hook-guard search",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "graphify hook-guard read",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

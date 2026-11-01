@@ -12,3 +12,6 @@ cases/
 # Python
 __pycache__/
 .pytest_cache/
+
+# Graphify output: regenerable, and may contain extracted document text
+graphify-out/

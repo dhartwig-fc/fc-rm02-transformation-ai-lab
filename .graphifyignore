@@ -1,0 +1,12 @@
+# Defence in depth: never map restricted material into the knowledge graph,
+# even if .gitignore changes. Mirrors .claude/frugal-sensitivity.json paths.
+data/real/
+data/restricted/
+cases/
+*.sar
+secrets/
+*.pem
+*.key
+.env
+.env.*
+!.env.example

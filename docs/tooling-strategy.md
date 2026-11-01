@@ -98,6 +98,7 @@ Ratings: **Adopt** (use now) · **Trial** (use in a bounded prototype) · **Asse
 - [x] Sensitivity gate config + tests
 - [ ] Synthetic data generator (`data/synthetic/`)
 - [ ] Licence register (`docs/licences.md`)
+- [x] Plugins: Graphify + Impeccable audited and installed (see [plugins.md](plugins.md))
 
 ### Phase 2: Capability layer (weeks 3–5)
 - [ ] First Skill via `skill-creator`: **fincrime-typology-classifier** (input: case facts → FATF/NCA typology + red flags + rationale)
