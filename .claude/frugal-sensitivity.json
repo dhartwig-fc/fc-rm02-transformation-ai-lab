@@ -1,0 +1,89 @@
+{
+  "_comment": "Sensitivity gate for the Financial Crime AI Lab. Enforced by the frugal plugin's guard_sensitive.py PreToolUse hook: an Agent (sub-agent) spawn whose text matches a rule is blocked unless the target agent is in allow_agents, so the work stays in the main loop. Fails CLOSED: a malformed file blocks all delegation. Tested by tests/test_sensitivity_gate.py - add a positive and a negative case there for every rule you change. Patterns are Python regexes; paths are fnmatch globs (* also matches /).",
+  "rules": [
+    {
+      "name": "iban",
+      "_comment": "Any IBAN shape (2-letter country, 2 check digits, 11-30 alphanumerics), with or without 4-char spacing.",
+      "patterns": [
+        "\\b[A-Z]{2}\\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,3})?\\b"
+      ],
+      "paths": [],
+      "allow_agents": []
+    },
+    {
+      "name": "uk-sort-code-and-account",
+      "_comment": "Sort code (12-34-56 or 12 34 56) followed within ~30 chars by an 8-digit account number. A sort code on its own is not flagged (too date-like).",
+      "patterns": [
+        "\\b\\d{2}[- ]\\d{2}[- ]\\d{2}\\b.{0,30}?\\b\\d{8}\\b"
+      ],
+      "paths": [],
+      "allow_agents": []
+    },
+    {
+      "name": "payment-card-pan",
+      "_comment": "Visa / Mastercard / Amex / Discover number shapes, optional space or dash separators.",
+      "patterns": [
+        "\\b(?:4\\d{3}|5[1-5]\\d{2}|2[2-7]\\d{2}|6011)(?:[ -]?\\d{4}){3}\\b",
+        "\\b3[47]\\d{2}[ -]?\\d{6}[ -]?\\d{5}\\b"
+      ],
+      "paths": [],
+      "allow_agents": []
+    },
+    {
+      "name": "uk-national-insurance-number",
+      "_comment": "HMRC NINO format, excluding invalid prefixes (D, F, I, Q, U, V; O as second letter).",
+      "patterns": [
+        "\\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z] ?\\d{2} ?\\d{2} ?\\d{2} ?[A-D]\\b"
+      ],
+      "paths": [],
+      "allow_agents": []
+    },
+    {
+      "name": "passport-number-in-context",
+      "_comment": "9-digit or 2-letter+7-digit number within 25 chars of the word passport. Bare 9-digit numbers are too common to flag.",
+      "patterns": [
+        "(?i)passport.{0,25}?\\b(?:\\d{9}|[A-Z]{2}\\d{7})\\b"
+      ],
+      "paths": [],
+      "allow_agents": []
+    },
+    {
+      "name": "case-and-sar-material",
+      "_comment": "Real case material: SAR / DAML references with an identifier, protective markings, and the lab's restricted folders. Talking ABOUT SARs or typologies is fine; carrying a reference number is not. Path globs are prefixed with * so ./ and backtick-quoted paths still match.",
+      "patterns": [
+        "(?i)\\b(?:SAR|DAML|STR)[ -]?(?:ref(?:erence)?|no\\.?|number|id)[ :#-]*[A-Z0-9][A-Z0-9/-]{3,}",
+        "\\b(?:OFFICIAL[- ]SENSITIVE|STRICTLY CONFIDENTIAL|RESTRICTED - CASE DATA)\\b"
+      ],
+      "paths": [
+        "*data/real/*",
+        "*data/restricted/*",
+        "*cases/*",
+        "*.sar",
+        "*.sar?"
+      ],
+      "allow_agents": []
+    },
+    {
+      "name": "secrets-and-keys",
+      "_comment": "API keys, tokens and private key material, by content or by path.",
+      "patterns": [
+        "-----BEGIN [A-Z ]*PRIVATE KEY-----",
+        "\\b(?:sk-ant-|sk-|ghp_|github_pat_|xox[baprs]-)[A-Za-z0-9_-]{16,}\\b",
+        "\\bAKIA[0-9A-Z]{16}\\b",
+        "\\bWEBUI_SECRET_KEY=[0-9a-f]{16,}"
+      ],
+      "paths": [
+        "*secrets/*",
+        "*.pem",
+        "*.pem?",
+        "*.key",
+        "*.key?",
+        "*.env",
+        "*.env?",
+        "*.env.local*",
+        "*.env.prod*"
+      ],
+      "allow_agents": []
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+# Local stack secrets
+.env
+.env.local
+.env.prod*
+
+# Never commit real or restricted data - this lab is synthetic/public data only
+data/real/
+data/restricted/
+cases/
+*.sar
+
+# Python
+__pycache__/
+.pytest_cache/
+
+# Graphify output: regenerable, and may contain extracted document text
+graphify-out/

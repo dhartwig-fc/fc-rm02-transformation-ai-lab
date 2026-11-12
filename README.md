@@ -51,6 +51,13 @@ This repository will document learning, experimentation, prototypes and proof-of
 
 ---
 
+## Getting Started
+
+- [Tooling strategy](docs/tooling-strategy.md): review of 12 AI repos and the lab's adoption roadmap
+- [Local stack & sensitivity gate](docs/local-stack.md): Ollama + Open WebUI on localhost, plus the PII/case-data delegation guard
+
+---
+
 ## Planned Projects
 
 ### Investigator Copilot

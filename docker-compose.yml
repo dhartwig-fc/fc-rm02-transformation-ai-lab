@@ -1,0 +1,68 @@
+# Financial Crime AI Lab - local stack (Ollama + Open WebUI)
+#
+# Security posture:
+#   - Every port binds to 127.0.0.1 only. Nothing is reachable from your network.
+#   - Images are pinned (see .env). Bump deliberately, after reading release notes
+#     and security advisories, and record the change in docs/licences.md.
+#   - Telemetry is switched off.
+#
+# Usage: see docs/local-stack.md, or simply `scripts/lab.sh up`.
+#
+# Two modes:
+#   docker   (Linux / Windows+WSL, optional NVIDIA GPU)
+#            -> `docker compose --profile docker-ollama up -d`
+#   native   (macOS: Docker cannot use the Apple GPU, so run Ollama natively)
+#            -> install Ollama from ollama.com, then `docker compose up -d`
+#               with OLLAMA_BASE_URL=http://host.docker.internal:11434 in .env
+
+name: fc-ai-lab
+
+services:
+  ollama:
+    profiles: ["docker-ollama"]
+    image: ollama/ollama:${OLLAMA_VERSION:-0.40.13}
+    container_name: fc-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
+      # Never set OLLAMA_ORIGINS=* - it lets any website you browse call your models.
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:${OPEN_WEBUI_VERSION:-v0.9.4}
+    container_name: fc-open-webui
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${OPEN_WEBUI_PORT:-3000}:8080"
+    volumes:
+      - open-webui-data:/app/backend/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?set WEBUI_SECRET_KEY in .env (scripts/lab.sh init does this)}
+      WEBUI_AUTH: "true"
+      # The first account created becomes admin; after that, sign-ups are closed.
+      ENABLE_SIGNUP: ${ENABLE_SIGNUP:-true}
+      DEFAULT_USER_ROLE: pending
+      # Keep the lab offline-by-default: no web search, no cloud model providers.
+      ENABLE_OPENAI_API: "false"
+      ENABLE_WEB_SEARCH: "false"
+      RAG_EMBEDDING_ENGINE: ollama
+      RAG_EMBEDDING_MODEL: ${LAB_EMBED_MODEL:-nomic-embed-text}
+      # Telemetry off
+      ANONYMIZED_TELEMETRY: "false"
+      SCARF_NO_ANALYTICS: "true"
+      DO_NOT_TRACK: "true"
+
+volumes:
+  ollama-models:
+  open-webui-data:
