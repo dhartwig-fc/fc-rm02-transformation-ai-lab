@@ -10,6 +10,8 @@ The purpose of this repository is to combine Financial Crime domain expertise wi
 
 This repository will document learning, experimentation, prototypes and proof-of-concepts across AI, automation, analytics and financial crime transformation.
 
+> **Status (12 November 2026):** `main` still holds the June 2026 plan below. Later lab work sits on two branches that have not been merged and are under review: `claude/determined-faraday-yzmof6` (a local LLM lab stack with a sensitivity gate, October to November 2026) and `claude/study-project-tuning-qnhasg` (a ten-week transaction-monitoring rule-tuning study, September 2026).
+
 ---
 
 ## Areas of Focus
