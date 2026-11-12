@@ -51,6 +51,21 @@ This repository will document learning, experimentation, prototypes and proof-of
 
 ---
 
+## Active Projects
+
+### Transaction Monitoring Rule Tuning
+
+[`projects/tm-rule-tuning`](projects/tm-rule-tuning/) — a 10-week practical
+curriculum in advanced transaction monitoring rule tuning, plus `tmtuning`, the
+reusable Python toolkit the exercises are built on.
+
+Covers backtest design, evidence-led threshold optimisation, alert-volume and
+risk-yield curves, segment-specific calibration, above/below-the-line testing,
+drift detection, champion-versus-challenger comparison, and the production of
+validation-ready tuning papers.
+
+---
+
 ## Planned Projects
 
 ### Investigator Copilot

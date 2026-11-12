@@ -1,0 +1,14 @@
+# Core stack for the 10-week TM rule tuning curriculum.
+# Pinned to major versions that the exercises are validated against.
+pandas>=2.2,<4
+numpy>=1.26,<3
+matplotlib>=3.8,<4
+seaborn>=0.13,<1
+scipy>=1.11,<2
+scikit-learn>=1.4,<2
+
+# Test + notebook tooling
+pytest>=8.0
+# Optional: `jupytext --to notebook weeks/week01_*.py` turns any week into a .ipynb
+# jupytext>=1.16
+# jupyter>=1.0
